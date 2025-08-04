@@ -1,0 +1,14 @@
+{
+	"required": true,
+	"package": "top.fish1000.pymcfabric.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"mixins": [
+		"PyMinecraftMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}

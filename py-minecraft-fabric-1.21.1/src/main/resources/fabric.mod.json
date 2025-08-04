@@ -1,0 +1,40 @@
+{
+	"schemaVersion": 1,
+	"id": "py-minecraft-fabric",
+	"version": "${version}",
+	"name": "Py Minecraft Fabric",
+	"description": "This is an example description! Tell everyone what your mod is about!",
+	"authors": [
+		"鱼干"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/py-minecraft-fabric/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"top.fish1000.pymcfabric.PyMinecraftFabric"
+		],
+		"client": [
+			"top.fish1000.pymcfabric.PyMinecraftFabricClient"
+		]
+	},
+	"mixins": [
+		"py-minecraft-fabric.mixins.json",
+		{
+			"config": "py-minecraft-fabric.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.16.14",
+		"minecraft": "~1.21.1",
+		"java": ">=21"
+	},
+	"suggests": {
+		"another-mod": "*"
+	}
+}
