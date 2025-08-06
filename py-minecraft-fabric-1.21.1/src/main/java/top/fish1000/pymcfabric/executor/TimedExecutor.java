@@ -6,7 +6,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-public class TimedExecutor<T, S extends Supplier<Consumer<T>>, L extends List<S>> {
+public abstract class TimedExecutor<T, S extends Supplier<Consumer<T>>, L extends List<S>> {
     public enum TickType {
         RELATIVE, ABSOLUTE;
 
