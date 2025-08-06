@@ -104,6 +104,20 @@ class JavaUtils(JavaObjectHandler):
         """
         return self.obj.MOD_ID  # type: ignore
 
+    def get_command_source(self, server: "Server", name: str):
+        """
+        获取命令源对象
+
+        Args:
+            server (Server): 服务器对象
+            name (str): 命令源名称
+
+        Returns:
+            命令源对象
+        """
+
+        return self.obj.getCommandSource(server.obj, name)  # type: ignore
+
 
 class NamedExecutor(JavaObjectHandler):
     """
@@ -174,6 +188,7 @@ class Server(JavaObjectHandler):
     """
 
     logger: JavaLogger
+    _utlis: JavaUtils
 
     def __init__(self, server: JavaObject) -> None:
         """
@@ -185,21 +200,24 @@ class Server(JavaObjectHandler):
         from .connection import get_javautils
 
         super().__init__(server)
-        self.logger = get_javautils().LOGGER
+        self._utlis = get_javautils()
+        self.logger = self._utlis.LOGGER
 
-    def cmd(self, str: str):
+    def cmd(self, str: str, name: str = "PYMC"):
         """
         执行Minecraft命令
 
         Args:
             str (str): 要执行的命令字符串
         """
-        source = self.obj.getCommandSource()  # type: ignore
+        source = self._utlis.get_command_source(self, name)
         self.obj.getCommandManager().executeWithPrefix(source, str)  # type: ignore
 
     def log(self, str: str):
         """
         记录信息日志
+
+        等效于 server.logger.info
 
         Args:
             str (str): 日志消息

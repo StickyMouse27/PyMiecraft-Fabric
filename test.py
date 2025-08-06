@@ -9,7 +9,8 @@ counter: int = 0
 
 
 @ pymc.AtTick & pymc.ONCE
-def start(server: pymc.Server, info: pymc.TypeDict):
+def start_timer(server: pymc.Server, info: pymc.TypeDict):
+    """开始倒计时"""
     print("Say hello to mc")
     server.log("Hello from pymc-fabric!")
     server.cmd("say hello!!!!!!")
@@ -20,6 +21,7 @@ def start(server: pymc.Server, info: pymc.TypeDict):
 
 @ pymc.AtTickAfter(20) & pymc.ALWAYS & pymc.MaxTimesFlag(64)
 def tick(server: pymc.Server, info: pymc.TypeDict):
+    """每秒给大家一个钻石"""
     print(f"They must need more diamonds (time: {info[pymc.MaxTimesFlag].times}/64)")
     server.cmd("say Wanna diamonds?")
     server.cmd("give @a diamond")
@@ -32,6 +34,7 @@ def func_after_5_sec(server: pymc.Server, info: pymc.TypeDict):
     global timer, counter
     counter += 1
 
+    # 计数器实现和MaxTimesFlag实现效果相同
     if counter > 6:
         timer.cancel()
         server.log("total 30 sec passed, stoped")
