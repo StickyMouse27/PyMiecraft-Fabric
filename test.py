@@ -19,7 +19,7 @@ def start_timer(server: pymc.Server, info: pymc.TypeDict):
     timer = pymc.AtTickAfter(20 * 5) & pymc.ALWAYS | func_after_5_sec
 
 
-@ pymc.AtTickAfter(20) & pymc.ALWAYS & pymc.MaxTimesFlag(10)
+@ pymc.AtTickAfter(20) & pymc.ALWAYS & pymc.MaxTimesFlag(64)
 def tick(server: pymc.Server, info: pymc.TypeDict):
     """每秒给大家一个钻石"""
 
