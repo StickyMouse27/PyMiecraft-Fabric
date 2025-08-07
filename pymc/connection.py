@@ -1,3 +1,5 @@
+import threading
+import time
 from py4j.java_gateway import (
     JavaGateway,
     CallbackServerParameters,
@@ -58,8 +60,6 @@ def disconnect() -> None:
 
     关闭网关连接和回调服务器，释放相关资源
     """
-    import threading
-    import time
 
     global gateway, executor, javautils, connected
     if gateway is not None:
@@ -73,8 +73,8 @@ def disconnect() -> None:
                 if current_gateway is not None:
                     current_gateway.close()
                     LOGGER.info("Successfully disconnected from Java gateway")
-            except Exception as e:
-                LOGGER.error(f"Error while disconnecting from Java gateway: {e}")
+            except Py4JNetworkError as e:
+                LOGGER.error("Error while disconnecting from Java gateway: %s", e)
             finally:
                 # 在连接关闭后清理全局变量引用
                 global gateway, executor, javautils, connected

@@ -1,11 +1,12 @@
 from typing import Callable, Type, TypeAlias
 from functools import wraps
-from abc import ABC
+from abc import ABC, abstractmethod
 from enum import Enum
 
 from .utils import LOGGER
 from .javaobj_handler import Server, NamedAdvancedExecutor
 from .type_dict import TypeDict
+from .connection import get_executor
 
 
 CallbackFunction: TypeAlias = Callable[[Server, TypeDict], None]
@@ -50,6 +51,7 @@ class DecoratorBase(ABC):
     """
 
     func: CallbackFunction
+    wrapped: CallbackFunction
 
     def __call__(self, func: CallbackFunction) -> CallbackFunction:
         """
@@ -89,8 +91,8 @@ class DecoratorBase(ABC):
 
         可以被子类重写以实现特定逻辑。
         """
-        pass
 
+    @abstractmethod
     def modify_when_run(self, server: Server, info: TypeDict) -> bool:
         """
         在函数运行时执行的修改操作。
@@ -183,8 +185,6 @@ class AbstractAt(DecoratorBase):
             *flags (AtFlag): 应用于装饰器的标志
         """
 
-        from .connection import get_executor
-
         self.at = at
         for flag in flags:
             self &= flag
@@ -240,7 +240,6 @@ class AbstractAt(DecoratorBase):
         Args:
             flag (AtFlag): 要处理的标志
         """
-        pass
 
     def _get_middleman(self) -> Middleman:
         """
@@ -270,13 +269,13 @@ class At(AbstractAt):
         Args:
             flag (AtFlag): 运行标志
         """
-        if type(flag) is RunningFlag:
+        if isinstance(flag, RunningFlag):
             match flag:
                 case RunningFlag.ALWAYS:
-                    LOGGER.debug(f"push_continuous {self.wrapped.__name__}")
+                    LOGGER.debug("push_continuous %s", self.wrapped.__name__)
                     self.executor.push_continuous(self._get_middleman(), self.at)
                 case RunningFlag.ONCE:
-                    LOGGER.debug(f"push_once {self.wrapped.__name__}")
+                    LOGGER.debug("push_once %s", self.wrapped.__name__)
                     self.executor.push_once(self._get_middleman(), self.at)
                 case RunningFlag.NEVER:
                     pass
@@ -319,17 +318,17 @@ class After(AbstractAt):
         Args:
             flag (AtFlag): 要处理的标志
         """
-        if type(flag) is RunningFlag:
+        if isinstance(flag, RunningFlag):
             match flag:
                 case RunningFlag.ALWAYS:
                     LOGGER.debug(
-                        f"push_scheduled(Ready to repeat) {self.wrapped.__name__}"
+                        "push_scheduled(Ready to repeat) %s", self.wrapped.__name__
                     )
                     self.executor.push_scheduled(
                         self.after, self._get_middleman(), self.at
                     )
                 case RunningFlag.ONCE:
-                    LOGGER.debug(f"push_scheduled(Just once) {self.wrapped.__name__}")
+                    LOGGER.debug("push_scheduled(Just once) %s", self.wrapped.__name__)
                     self.executor.push_scheduled(
                         self.after, self._get_middleman(), self.at
                     )

@@ -35,14 +35,16 @@ def tick(server: pymc.Server, info: pymc.TypeDict):
 
 
 def func_after_5_sec(server: pymc.Server, info: pymc.TypeDict):
+    """每5秒执行一次"""
     server.log("5 sec passed")
     server.cmd("say 5 sec passed")
 
-    global timer, counter
+    global counter
     counter += 1
 
     # 计数器实现和MaxTimesFlag实现效果相同
     if counter > 6:
+        global timer
         timer.cancel()
         server.log("total 30 sec passed, stoped")
         server.cmd("say total 30 sec passed, stoped")

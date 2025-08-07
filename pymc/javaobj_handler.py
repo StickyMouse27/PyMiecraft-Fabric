@@ -1,7 +1,8 @@
-from py4j.java_gateway import JavaObject
 from typing import Protocol
+from py4j.java_gateway import JavaObject
 
 from .utils import LOGGER
+from .connection import get_javautils
 
 
 class JavaConsumer(Protocol):
@@ -11,7 +12,8 @@ class JavaConsumer(Protocol):
     用于定义接受服务器对象并执行操作的回调函数接口
     """
 
-    def accept(self, server: JavaObject) -> None: ...
+    def accept(self, server: JavaObject) -> None:
+        """对应java的accept方法"""
 
 
 class JavaObjectHandler:
@@ -85,7 +87,7 @@ class JavaUtils(JavaObjectHandler):
     """
 
     @property
-    def LOGGER(self) -> JavaLogger:
+    def logger(self) -> JavaLogger:
         """
         获取Java端日志记录器实例
 
@@ -95,7 +97,7 @@ class JavaUtils(JavaObjectHandler):
         return JavaLogger(self.obj.LOGGER)  # type: ignore
 
     @property
-    def MOD_ID(self) -> str:
+    def mod_id(self) -> str:
         """
         获取模组ID
 
@@ -197,13 +199,12 @@ class Server(JavaObjectHandler):
         Args:
             server (JavaObject): Minecraft服务器Java对象
         """
-        from .connection import get_javautils
 
         super().__init__(server)
         self._utlis = get_javautils()
-        self.logger = self._utlis.LOGGER
+        self.logger = self._utlis.logger
 
-    def cmd(self, str: str, name: str = "PYMC"):
+    def cmd(self, command: str, name: str = "PYMC"):
         """
         执行Minecraft命令
 
@@ -211,9 +212,9 @@ class Server(JavaObjectHandler):
             str (str): 要执行的命令字符串
         """
         source = self._utlis.get_command_source(name)
-        self.obj.getCommandManager().executeWithPrefix(source, str)  # type: ignore
+        self.obj.getCommandManager().executeWithPrefix(source, command)  # type: ignore
 
-    def log(self, str: str):
+    def log(self, msg: str):
         """
         记录信息日志
 
@@ -222,5 +223,5 @@ class Server(JavaObjectHandler):
         Args:
             str (str): 日志消息
         """
-        LOGGER.debug(f"logging {str}")
-        self.logger.info(str)
+        LOGGER.debug("logging %s", msg)
+        self.logger.info(msg)
