@@ -3,7 +3,7 @@ package top.fish1000.pymcfabric.executor;
 import java.util.LinkedList;
 import java.util.PriorityQueue;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
+import java.util.function.IntSupplier;
 
 public class IntervalExecutor<T>
         extends TimedExecutor<T, IntervalValue<Consumer<T>>, LinkedList<IntervalValue<Consumer<T>>>> {
@@ -11,12 +11,12 @@ public class IntervalExecutor<T>
     private final PriorityQueue<IntervalValue<Consumer<T>>> intervalScheduled = new PriorityQueue<>(
             (a, b) -> a.offset() - b.offset());
 
-    public IntervalExecutor(Supplier<Integer> tickSupplier) {
+    public IntervalExecutor(IntSupplier tickSupplier) {
         super(tickSupplier, LinkedList::new);
     }
 
     public void push(int tick, int interval, Consumer<T> callback, TickType tickType) {
-        int currentTick = tickSupplier.get();
+        int currentTick = tickSupplier.getAsInt();
         tick = tickType.convert(tick, currentTick);
         IntervalValue<Consumer<T>> val = new IntervalValue<>(interval, tick, callback);
         intervalScheduled.add(val);
@@ -24,7 +24,7 @@ public class IntervalExecutor<T>
     }
 
     public void tick(T data) {
-        int currentTick = tickSupplier.get();
+        int currentTick = tickSupplier.getAsInt();
         for (int i = 0; i < intervalScheduled.size(); i++) {
             IntervalValue<Consumer<T>> val = intervalScheduled.poll();
             if (val.offset() <= currentTick) {

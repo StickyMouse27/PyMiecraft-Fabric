@@ -19,12 +19,19 @@ def start_timer(server: pymc.Server, info: pymc.TypeDict):
     timer = pymc.AtTickAfter(20 * 5) & pymc.ALWAYS | func_after_5_sec
 
 
-@ pymc.AtTickAfter(20) & pymc.ALWAYS & pymc.MaxTimesFlag(64)
+@ pymc.AtTickAfter(20) & pymc.ALWAYS & pymc.MaxTimesFlag(10)
 def tick(server: pymc.Server, info: pymc.TypeDict):
     """每秒给大家一个钻石"""
-    print(f"They must need more diamonds (time: {info[pymc.MaxTimesFlag].times}/64)")
+
+    times_left = info[pymc.MaxTimesFlag].times_left
+    print(f"They must need more diamonds (diamond: {64 - times_left}/64)")
     server.cmd("say Wanna diamonds?")
     server.cmd("give @a diamond")
+
+    if info[pymc.MaxTimesFlag].stopped:
+        print("They are full of diamonds")
+
+        pymc.connection.disconnect()
 
 
 def func_after_5_sec(server: pymc.Server, info: pymc.TypeDict):

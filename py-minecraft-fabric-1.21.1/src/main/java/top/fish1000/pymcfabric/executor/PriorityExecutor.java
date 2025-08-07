@@ -2,12 +2,12 @@ package top.fish1000.pymcfabric.executor;
 
 import java.util.LinkedList;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
+import java.util.function.IntSupplier;
 
 public class PriorityExecutor<T>
         extends TimedExecutor<T, PriorityValue<Consumer<T>>, LinkedList<PriorityValue<Consumer<T>>>> {
 
-    PriorityExecutor(Supplier<Integer> tickSupplier) {
+    PriorityExecutor(IntSupplier tickSupplier) {
         super(tickSupplier, LinkedList::new);
     }
 
@@ -16,7 +16,7 @@ public class PriorityExecutor<T>
     }
 
     public void tick(T data) {
-        int currentTick = tickSupplier.get();
+        int currentTick = tickSupplier.getAsInt();
         LinkedList<PriorityValue<Consumer<T>>> toRun = scheduled.get(currentTick);
         toRun.sort((a, b) -> a.priority() - b.priority());
         scheduled.replace(currentTick, toRun);

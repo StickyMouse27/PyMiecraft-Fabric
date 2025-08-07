@@ -19,7 +19,8 @@ public class Utils {
     public static ServerCommandSource getCommandSource(MinecraftServer server, @Nullable String name) {
         ServerWorld serverWorld = server.getOverworld();
         return new ServerCommandSource(server, serverWorld == null ? Vec3d.ZERO : Vec3d.of(serverWorld.getSpawnPos()),
-                Vec2f.ZERO, serverWorld, 4, "PY4J", Text.literal(name == null ? "PY4J" : name), server, (Entity) null);
+                Vec2f.ZERO, serverWorld, 4, "Server", Text.literal(name == null ? "Server" : name), server,
+                (Entity) null);
     }
 
 }

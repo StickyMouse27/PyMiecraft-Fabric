@@ -104,7 +104,7 @@ class JavaUtils(JavaObjectHandler):
         """
         return self.obj.MOD_ID  # type: ignore
 
-    def get_command_source(self, server: "Server", name: str):
+    def get_command_source(self, server: "Server", name: str) -> JavaObject:
         """
         获取命令源对象
 

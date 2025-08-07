@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
 public abstract class TimedExecutor<T, S extends Supplier<Consumer<T>>, L extends List<S>> {
@@ -15,11 +16,11 @@ public abstract class TimedExecutor<T, S extends Supplier<Consumer<T>>, L extend
         }
     }
 
-    protected final Supplier<Integer> tickSupplier;
+    protected final IntSupplier tickSupplier;
     protected final HashMap<Integer, L> scheduled;
     protected final Supplier<L> listSupplier;
 
-    public TimedExecutor(Supplier<Integer> tickSupplier, Supplier<L> listSupplier) {
+    public TimedExecutor(IntSupplier tickSupplier, Supplier<L> listSupplier) {
         this.tickSupplier = Objects.requireNonNull(tickSupplier);
         this.listSupplier = Objects.requireNonNull(listSupplier);
         this.scheduled = new HashMap<>();
@@ -33,7 +34,7 @@ public abstract class TimedExecutor<T, S extends Supplier<Consumer<T>>, L extend
      * @param tickType         是否是相对tick
      */
     public void push(int tick, S callbackSupplier, TickType tickType) {
-        int currentTick = tickSupplier.get();
+        int currentTick = tickSupplier.getAsInt();
         tick = tickType.convert(tick, currentTick);
         if (tick < currentTick) {
             throw new IllegalArgumentException("Cannot execute for past tick");
@@ -47,7 +48,7 @@ public abstract class TimedExecutor<T, S extends Supplier<Consumer<T>>, L extend
      * @param data 数据
      */
     public void tick(T data) {
-        int currentTick = tickSupplier.get();
+        int currentTick = tickSupplier.getAsInt();
         L exes = scheduled.remove(currentTick);
         if (exes != null) {
             exes.forEach(callback -> callback.get().accept(data));
