@@ -1,4 +1,11 @@
-import pymc
+"""
+PyMiecraft Fabric
+示例文档
+
+Link: https://github.com/StickyMouse27/PyMiecraft-Fabric
+"""
+
+import pyminecraft as pymc
 
 # import logging
 
