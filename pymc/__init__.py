@@ -1,3 +1,5 @@
+"""PyMinecraft-Fabric"""
+
 from .at import *
 from .javaobj_handler import *
 from .utils import *

@@ -116,9 +116,8 @@ def try_connect(
         if should_raise:
             LOGGER.error(msg)
             raise
-        else:
-            LOGGER.info(msg)
-            return None
+        LOGGER.info(msg)
+        return None
     except Py4JJavaError:
         LOGGER.error(
             "Something wrong happened in java side while connecting. "
@@ -157,11 +156,10 @@ def get_executor() -> NamedAdvancedExecutor:
     """
     if executor:
         return executor
-    else:
-        try_connect()
-        if executor:
-            return executor
-        raise RuntimeError("Cannot get executor. This should never happen")
+    try_connect()
+    if executor:
+        return executor
+    raise RuntimeError("Cannot get executor. This should never happen")
 
 
 def get_javautils() -> JavaUtils:
@@ -178,8 +176,7 @@ def get_javautils() -> JavaUtils:
     """
     if javautils:
         return javautils
-    else:
-        try_connect()
-        if javautils:
-            return javautils
-        raise RuntimeError("Cannot get javautils. This should never happen")
+    try_connect()
+    if javautils:
+        return javautils
+    raise RuntimeError("Cannot get javautils. This should never happen")

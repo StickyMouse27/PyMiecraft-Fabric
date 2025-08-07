@@ -40,6 +40,8 @@ class Middleman:
         self.func(Server(server), self.info)
 
     class Java:
+        """标记为实现Java接口"""
+
         implements = ["java.util.function.Consumer"]
 
 

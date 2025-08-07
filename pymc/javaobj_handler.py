@@ -2,7 +2,6 @@ from typing import Protocol
 from py4j.java_gateway import JavaObject
 
 from .utils import LOGGER
-from .connection import get_javautils
 
 
 class JavaConsumer(Protocol):
@@ -199,6 +198,7 @@ class Server(JavaObjectHandler):
         Args:
             server (JavaObject): Minecraft服务器Java对象
         """
+        from .connection import get_javautils
 
         super().__init__(server)
         self._utlis = get_javautils()
