@@ -28,11 +28,18 @@ public abstract class PyMinecraftMixin {
     // -> ticks);
     private final NamedAdvancedExecutor<MinecraftServer> executor = new NamedAdvancedExecutor<>(() -> ticks);
 
+    private MinecraftServer server;
+
     private void startPy4j() {
         GatewayServer gatewayServer = new GatewayServer(new Py4jEntryPoint() {
             @Override
             public NamedAdvancedExecutor<MinecraftServer> getExecutor() {
                 return PyMinecraftMixin.this.executor;
+            }
+
+            @Override
+            public Utils getUtils() {
+                return new Utils(PyMinecraftMixin.this.server);
             }
         });
         gatewayServer.start();
@@ -41,6 +48,7 @@ public abstract class PyMinecraftMixin {
     @Inject(at = @At("HEAD"), method = "loadWorld()V")
     private void init(CallbackInfo info) {
         try {
+            server = (MinecraftServer) (Object) this;
             startPy4j();
         } catch (Exception e) {
             Utils.LOGGER.error("Failed to start py4j server", e);
@@ -53,7 +61,7 @@ public abstract class PyMinecraftMixin {
     private void tick(CallbackInfo info) {
         profiler.swap("py4j");
         // long start = System.nanoTime();
-        executor.tick((MinecraftServer) (Object) this, "tick");
+        executor.tryTick(server, "tick");
         // long end = System.nanoTime();
         // utils.LOGGER.info("py4j tick: {}ms", (end - start) / 1000000d);
     }

@@ -104,7 +104,7 @@ class JavaUtils(JavaObjectHandler):
         """
         return self.obj.MOD_ID  # type: ignore
 
-    def get_command_source(self, server: "Server", name: str) -> JavaObject:
+    def get_command_source(self, name: str) -> JavaObject:
         """
         获取命令源对象
 
@@ -116,7 +116,7 @@ class JavaUtils(JavaObjectHandler):
             命令源对象
         """
 
-        return self.obj.getCommandSource(server.obj, name)  # type: ignore
+        return self.obj.getCommandSource(name)  # type: ignore
 
 
 class NamedExecutor(JavaObjectHandler):
@@ -210,7 +210,7 @@ class Server(JavaObjectHandler):
         Args:
             str (str): 要执行的命令字符串
         """
-        source = self._utlis.get_command_source(self, name)
+        source = self._utlis.get_command_source(name)
         self.obj.getCommandManager().executeWithPrefix(source, str)  # type: ignore
 
     def log(self, str: str):

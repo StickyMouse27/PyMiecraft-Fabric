@@ -38,6 +38,15 @@ public class NamedAdvancedExecutor<T> extends NamedExecutor<T> {
         callbackOnceList.removeIf(namedValue -> namedValue.name().equals(name));
     }
 
+    public void tryTick(T data, String name) {
+        try {
+            tick(data, name);
+        } catch (Exception e) {
+            Utils.LOGGER.error("Error in callback, skipped: tick{} @ {}", tickSupplier.getAsInt(), name);
+            e.printStackTrace();
+        }
+    }
+
     public void pushScheduled(int tick, Consumer<T> callback, String name) {
         Utils.LOGGER.info("Pushing callback(scheduled): tick{} @ {}", tickSupplier.getAsInt(), name);
         super.push(tick, callback, name, TickType.RELATIVE);
