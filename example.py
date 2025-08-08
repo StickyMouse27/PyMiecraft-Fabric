@@ -11,9 +11,6 @@ import pyminecraft as pymc
 
 # logging.basicConfig(level=logging.DEBUG)
 
-timer: pymc.AbstractAt
-counter: int = 0
-
 
 @ pymc.AtTick & pymc.ONCE
 def start_timer(server: pymc.Server, info: pymc.TypeDict):
@@ -22,8 +19,8 @@ def start_timer(server: pymc.Server, info: pymc.TypeDict):
     server.log("Hello from pymc-fabric!")
     server.cmd("say hello!!!!!!")
 
-    global timer
-    timer = pymc.AtTickAfter(20 * 5) & pymc.ALWAYS | func_after_5_sec
+    info[dict]["timer"] = pymc.AtTickAfter(20 * 5) & pymc.ALWAYS | func_after_5_sec
+    info[dict]["counter"] = 0
 
 
 @ pymc.AtTickAfter(20) & pymc.ALWAYS & pymc.MaxTimesFlag(64)
@@ -46,12 +43,11 @@ def func_after_5_sec(server: pymc.Server, info: pymc.TypeDict):
     server.log("5 sec passed")
     server.cmd("say 5 sec passed")
 
-    global counter
-    counter += 1
+    info[dict]["counter"] += 1
 
     # 计数器实现和MaxTimesFlag实现效果相同
-    if counter > 6:
-        global timer
+    if info[dict]["counter"] > 6:
+        timer: pymc.AtTickAfter = info[dict]["timer"]
         timer.cancel()
         server.log("total 30 sec passed, stoped")
         server.cmd("say total 30 sec passed, stoped")
