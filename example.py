@@ -53,8 +53,8 @@ def func_after_5_sec(server: pymc.Server, info: pymc.TypeDict):
         server.log("total 30 sec passed, stoped")
         server.cmd("say total 30 sec passed, stoped")
 
+
 # 新功能测试：实体
 
-@ pymc.AtTickAfter(20)
-def entity(server: pymc.Server, info: pymc.TypeDict):
-    
+# @ pymc.AtTickAfter(20)
+# def entity(server: pymc.Server, info: pymc.TypeDict):

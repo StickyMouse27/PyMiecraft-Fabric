@@ -2,7 +2,7 @@
 
 from typing import Callable, Self, Type, TypeAlias
 from functools import wraps
-from abc import ABC, abstractmethod
+from abc import ABC
 from enum import Enum
 
 from .utils import LOGGER
@@ -32,14 +32,14 @@ class Middleman:
         self.func = func
         self.info = info
 
-    def accept(self, server):
+    def accept(self, obj):
         """
         Java端调用的方法，用于执行Python回调函数。
 
         Args:
             server: Java端传入的服务器对象
         """
-        self.func(Server(server, get_javautils()), self.info)
+        self.func(Server(obj, get_javautils()), self.info)
 
     class Java:
         """标记为实现Java接口"""
