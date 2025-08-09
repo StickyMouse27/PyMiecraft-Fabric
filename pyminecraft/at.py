@@ -84,8 +84,8 @@ class DecoratorBase(ABC):
 
         @wraps(self.func)
         def wrapper(server: Server, info: TypeDict) -> None:
-            self.modify_when_run()
             self.func(server, info)
+            self.modify_when_run()
 
         return wrapper
 
@@ -169,7 +169,7 @@ class AbstractAt(DecoratorBase):
     """
 
     at: str
-    flag: TypeDict = TypeDict()
+    data: TypeDict = TypeDict()
     executor: NamedAdvancedExecutor
     AVAILABLE_FLAGS: list[Type[AtFlag]] = [RunningFlag]
 
@@ -185,8 +185,14 @@ class AbstractAt(DecoratorBase):
         self.at = at
         for flag in flags:
             self &= flag
-        if RunningFlag not in self.flag:
-            self.flag[RunningFlag] = RunningFlag.ONCE
+
+        if RunningFlag not in self.data:
+            self.data[RunningFlag] = RunningFlag.ONCE
+
+        if dict not in self.data:
+            self.data[dict] = {}
+
+        self.data[type(self)] = self
 
         self.executor = get_executor()
 
@@ -205,7 +211,7 @@ class AbstractAt(DecoratorBase):
                 f"Invalid flag for At class {self.__class__.__name__}:", other
             )
 
-        self.flag[type(other)] = other
+        self.data[type(other)] = other
 
         return self
 
@@ -227,7 +233,7 @@ class AbstractAt(DecoratorBase):
         在装饰器定义时执行，处理所有已设置的标志。
         """
         for flag_type in At.AVAILABLE_FLAGS:
-            if flag_value := self.flag.get(flag_type):
+            if flag_value := self.data.get(flag_type):
                 self._sub_modify_when_def_with_flag(flag_value)
 
     def _sub_modify_when_def_with_flag(self, flag: AtFlag) -> None:
@@ -245,13 +251,13 @@ class AbstractAt(DecoratorBase):
         Returns:
             Middleman: 中间人实例
         """
-        return Middleman(self.wrapped, self.flag)
+        return Middleman(self.wrapped, self.data)
 
     def cancel(self) -> None:
         """
         取消装饰器的执行，将其设置为从不执行。
         """
-        self.flag[RunningFlag] = RunningFlag.NEVER
+        self.data[RunningFlag] = RunningFlag.NEVER
 
 
 class At(AbstractAt):
@@ -269,17 +275,17 @@ class At(AbstractAt):
         if isinstance(flag, RunningFlag):
             match flag:
                 case RunningFlag.ALWAYS:
-                    LOGGER.debug("push_continuous %s", self.wrapped.__name__)
+                    LOGGER.info("push_continuous %s", self.wrapped.__name__)
                     self.executor.push_continuous(self._get_middleman(), self.at)
                 case RunningFlag.ONCE:
-                    LOGGER.debug("push_once %s", self.wrapped.__name__)
+                    LOGGER.info("push_once %s", self.wrapped.__name__)
                     self.executor.push_once(self._get_middleman(), self.at)
                 case RunningFlag.NEVER:
                     pass
                 case _:
                     raise ValueError(f"Should never reached! Invalid flag: {flag}")
         else:
-            raise ValueError(f"Should never reached! Invalid type of flag: {flag}")
+            raise ValueError(f"Invalid type of flag: {flag}")
 
 
 class After(AbstractAt):
@@ -318,14 +324,14 @@ class After(AbstractAt):
         if isinstance(flag, RunningFlag):
             match flag:
                 case RunningFlag.ALWAYS:
-                    LOGGER.debug(
+                    LOGGER.info(
                         "push_scheduled(Ready to repeat) %s", self.wrapped.__name__
                     )
                     self.executor.push_scheduled(
                         self.after, self._get_middleman(), self.at
                     )
                 case RunningFlag.ONCE:
-                    LOGGER.debug("push_scheduled(Just once) %s", self.wrapped.__name__)
+                    LOGGER.info("push_scheduled(Just once) %s", self.wrapped.__name__)
                     self.executor.push_scheduled(
                         self.after, self._get_middleman(), self.at
                     )
@@ -341,13 +347,13 @@ class After(AbstractAt):
     def modify_when_run(self) -> None:
         """在函数运行时根据标志决定是否重新安排任务执行。"""
 
-        if flag := self.flag.get(MaxTimesFlag):
+        if flag := self.data.get(MaxTimesFlag):
             if flag.times_left > 0:
                 flag.times_left -= 1
             else:
                 flag.stopped = True
                 self.cancel()
-        if self.flag[RunningFlag] == RunningFlag.ALWAYS:
+        if self.data[RunningFlag] == RunningFlag.ALWAYS:
             self.executor.push_scheduled(self.after, self._get_middleman(), self.at)
 
 

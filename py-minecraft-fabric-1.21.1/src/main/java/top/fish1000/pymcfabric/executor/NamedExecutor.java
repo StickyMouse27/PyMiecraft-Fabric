@@ -11,7 +11,7 @@ public class NamedExecutor<T> extends TimedExecutor<T, NamedValue<Consumer<T>>, 
 
     public void tick(T data, String name) {
         int currentTick = tickSupplier.getAsInt();
-        LinkedList<NamedValue<Consumer<T>>> exes = scheduled.remove(currentTick);
+        LinkedList<NamedValue<Consumer<T>>> exes = callbackScheduled.remove(currentTick);
         if (exes != null) {
             exes.forEach(callback -> {
                 if (callback.name().equals(name))

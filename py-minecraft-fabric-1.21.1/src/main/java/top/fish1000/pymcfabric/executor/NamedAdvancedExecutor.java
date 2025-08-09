@@ -35,14 +35,18 @@ public class NamedAdvancedExecutor<T> extends NamedExecutor<T> {
                 Utils.LOGGER.info("Found callback(once), removed");
             }
         });
-        callbackOnceList.removeIf(namedValue -> namedValue.name().equals(name));
+        callbackOnceList.removeIf(nv -> nv.name().equals(name));
     }
 
     public void tryTick(T data, String name) {
         try {
             tick(data, name);
         } catch (Exception e) {
-            Utils.LOGGER.error("Error in callback, skipped: tick{} @ {}", tickSupplier.getAsInt(), name);
+            callbackContinuousList.clear();
+            callbackOnceList.clear();
+            callbackScheduled.clear();
+            Utils.LOGGER.error("Error in callback, skipped, callback list cleared: tick{} @ {}",
+                    tickSupplier.getAsInt(), name);
             e.printStackTrace();
         }
     }

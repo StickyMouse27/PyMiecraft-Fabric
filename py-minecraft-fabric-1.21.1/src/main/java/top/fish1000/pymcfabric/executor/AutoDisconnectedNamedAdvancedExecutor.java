@@ -13,7 +13,7 @@ public class AutoDisconnectedNamedAdvancedExecutor<T> extends NamedAdvancedExecu
     @Override
     public void tick(T data, String name) {
         super.tick(data, name);
-        if (callbackOnceList.isEmpty() && callbackContinuousList.isEmpty() && scheduled.isEmpty()) {
+        if (callbackOnceList.isEmpty() && callbackContinuousList.isEmpty() && callbackScheduled.isEmpty()) {
             disconnectCallback.run();
         }
     }

@@ -17,13 +17,13 @@ public abstract class TimedExecutor<T, S extends Supplier<Consumer<T>>, L extend
     }
 
     protected final IntSupplier tickSupplier;
-    protected final HashMap<Integer, L> scheduled;
+    protected final HashMap<Integer, L> callbackScheduled;
     protected final Supplier<L> listSupplier;
 
     public TimedExecutor(IntSupplier tickSupplier, Supplier<L> listSupplier) {
         this.tickSupplier = Objects.requireNonNull(tickSupplier);
         this.listSupplier = Objects.requireNonNull(listSupplier);
-        this.scheduled = new HashMap<>();
+        this.callbackScheduled = new HashMap<>();
     }
 
     /**
@@ -39,7 +39,7 @@ public abstract class TimedExecutor<T, S extends Supplier<Consumer<T>>, L extend
         if (tick < currentTick) {
             throw new IllegalArgumentException("Cannot execute for past tick");
         }
-        scheduled.computeIfAbsent(tick, k -> listSupplier.get()).add(callbackSupplier);
+        callbackScheduled.computeIfAbsent(tick, k -> listSupplier.get()).add(callbackSupplier);
     }
 
     /**
@@ -49,8 +49,9 @@ public abstract class TimedExecutor<T, S extends Supplier<Consumer<T>>, L extend
      */
     public void tick(T data) {
         int currentTick = tickSupplier.getAsInt();
-        L exes = scheduled.remove(currentTick);
+        L exes = callbackScheduled.remove(currentTick);
         if (exes != null) {
+            System.out.println("tick " + currentTick);
             exes.forEach(callback -> callback.get().accept(data));
         }
     }

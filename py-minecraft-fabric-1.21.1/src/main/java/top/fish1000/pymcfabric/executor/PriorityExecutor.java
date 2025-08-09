@@ -17,9 +17,9 @@ public class PriorityExecutor<T>
 
     public void tick(T data) {
         int currentTick = tickSupplier.getAsInt();
-        LinkedList<PriorityValue<Consumer<T>>> toRun = scheduled.get(currentTick);
+        LinkedList<PriorityValue<Consumer<T>>> toRun = callbackScheduled.get(currentTick);
         toRun.sort((a, b) -> a.priority() - b.priority());
-        scheduled.replace(currentTick, toRun);
+        callbackScheduled.replace(currentTick, toRun);
         super.tick(data);
     }
 }

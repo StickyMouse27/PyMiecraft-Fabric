@@ -5,11 +5,12 @@ PyMiecraft Fabric
 Link: https://github.com/StickyMouse27/PyMiecraft-Fabric
 """
 
+import logging
+
 import pyminecraft as pymc
 
-# import logging
 
-# logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 
 @ pymc.AtTick & pymc.ONCE
@@ -19,8 +20,8 @@ def start_timer(server: pymc.Server, info: pymc.TypeDict):
     server.log("Hello from pymc-fabric!")
     server.cmd("say hello!!!!!!")
 
-    # 可以使用全局变量实现，但是这不符合最佳实践
-    info[dict]["timer"] = pymc.AtTickAfter(20 * 5) & pymc.ALWAYS | func_after_5_sec
+    # 也可以使用全局变量实现
+    (pymc.AtTickAfter(20 * 5) & pymc.ALWAYS)(func_after_5_sec)
     info[dict]["counter"] = 0
 
 
@@ -36,21 +37,21 @@ def tick(server: pymc.Server, info: pymc.TypeDict):
     if info[pymc.MaxTimesFlag].stopped:
         print("They are full of diamonds")
 
-        pymc.connection.disconnect()
+        # pymc.connection.disconnect()
 
 
 def func_after_5_sec(server: pymc.Server, info: pymc.TypeDict):
     """每5秒执行一次"""
-    server.log("5 sec passed")
+    print("5 sec passed")
     server.cmd("say 5 sec passed")
 
     info[dict]["counter"] += 1
 
     # 计数器实现和MaxTimesFlag实现效果相同
-    if info[dict]["counter"] > 6:
-        timer: pymc.AtTickAfter = info[dict]["timer"]
+    if info[dict]["counter"] >= 6:
+        timer = info[pymc.AtTickAfter]
         timer.cancel()
-        server.log("total 30 sec passed, stoped")
+        print("total 30 sec passed, stoped")
         server.cmd("say total 30 sec passed, stoped")
 
 

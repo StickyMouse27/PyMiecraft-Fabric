@@ -85,6 +85,8 @@ class Connection:
         )
         self._javautils = JavaUtils(self._gateway.entry_point.getUtils())  # type: ignore
         self._connected = True
+
+        LOGGER.info("PyMinecraft connected successfully w")
         return self._gateway
 
     def disconnect(self) -> None:

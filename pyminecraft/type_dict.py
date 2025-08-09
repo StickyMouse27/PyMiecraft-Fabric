@@ -4,7 +4,6 @@ from typing import (
     ItemsView,
     KeysView,
     Type,
-    TypeVar,
     Dict,
     Any,
     Optional,
@@ -12,8 +11,6 @@ from typing import (
     ValuesView,
 )
 from collections.abc import MutableMapping
-
-T = TypeVar("T")
 
 
 class TypeDict(MutableMapping[Type[Any], Any]):
@@ -30,7 +27,7 @@ class TypeDict(MutableMapping[Type[Any], Any]):
     def __init__(self) -> None:
         self._data: Dict[Type[Any], Any] = {}
 
-    def __setitem__(self, key: Type[T], value: T) -> None:
+    def __setitem__[T](self, key: Type[T], value: T) -> None:
         """
         设置指定类型的值
 
@@ -42,7 +39,7 @@ class TypeDict(MutableMapping[Type[Any], Any]):
             raise TypeError(f"Value {value} is not an instance of {key}")
         self._data[key] = value
 
-    def __getitem__(self, key: Type[T]) -> T:
+    def __getitem__[T](self, key: Type[T]) -> T:
         """
         获取指定类型的值
 
@@ -99,7 +96,7 @@ class TypeDict(MutableMapping[Type[Any], Any]):
         """
         return key in self._data
 
-    def get(self, key: Type[T], default: Optional[T] = None) -> Optional[T]:
+    def get[T](self, key: Type[T], default: Optional[T] = None) -> Optional[T]:
         """
         获取指定类型的值，如果不存在则返回默认值
 
@@ -112,7 +109,7 @@ class TypeDict(MutableMapping[Type[Any], Any]):
         """
         return self._data.get(key, default)
 
-    def setdefault(self, key: Type[T], default: T = None) -> T:
+    def setdefault[T](self, key: Type[T], default: T = None) -> T:
         """
         如果指定类型不存在，则设置默认值并返回
 
