@@ -1,4 +1,8 @@
-"""PyMinecraft-Fabric"""
+"""
+PyMinecraft-Fabric
+
+Link: https://github.com/PyMinecraft/PyMinecraft-Fabric
+"""
 
 from .at import *
 from .javaobj_handler import *

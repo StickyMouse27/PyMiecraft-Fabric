@@ -1,3 +1,5 @@
+"""提供装饰器，将回调函数信息传递至java端"""
+
 from typing import Callable, Type, TypeAlias
 from functools import wraps
 from abc import ABC, abstractmethod

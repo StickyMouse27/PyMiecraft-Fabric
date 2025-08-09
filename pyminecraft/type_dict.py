@@ -1,3 +1,5 @@
+"""类型字典支持"""
+
 from typing import (
     ItemsView,
     KeysView,

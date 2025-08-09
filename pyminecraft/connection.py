@@ -26,7 +26,7 @@ from .utils import LOGGER
 from .javaobj_handler import NamedAdvancedExecutor, JavaUtils
 
 
-class MinecraftConnection:
+class Connection:
     """
     Minecraft与Java端的Py4J网关连接管理类
 
@@ -34,16 +34,18 @@ class MinecraftConnection:
     获取网关实例、执行器和工具类等功能的统一管理。
     """
 
-    _instance = None
+    _instance: "Connection | None" = None
     _lock = threading.Lock()
+    _connected: bool
+    _gateway: JavaGateway | None
+    _executor: NamedAdvancedExecutor | None
+    _javautils: JavaUtils | None
 
     # 全局网关参数配置
     gateway_params: GatewayParameters | None = None
 
     def __new__(cls):
-        """
-        确保类的单例实例
-        """
+        """确保类的单例实例"""
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
@@ -94,8 +96,11 @@ class MinecraftConnection:
             def delayed_disconnect():
                 time.sleep(0.1)  # 延迟0.1秒
                 try:
-                    self._gateway.close()
-                    LOGGER.info("Successfully disconnected from Java gateway")
+                    if self._gateway is not None:
+                        self._gateway.close()
+                        LOGGER.info("Successfully disconnected from Java gateway")
+                    else:
+                        LOGGER.error("Cannot disconnect. Have not connected")
                 except Py4JNetworkError as e:
                     LOGGER.error("Error while disconnecting from Java gateway: %s", e)
                 finally:
@@ -156,7 +161,10 @@ class MinecraftConnection:
         """
         if self._gateway is not None:
             return self._gateway
-        return self.try_connect()  # type: ignore
+        self.try_connect()
+        if self._gateway is not None:
+            return self._gateway
+        raise RuntimeError("Cannnot connect to the gateway. This should never happen.")
 
     def get_executor(self) -> NamedAdvancedExecutor:
         """
@@ -238,7 +246,7 @@ class MinecraftConnection:
 
 
 # 创建单例实例并尝试连接
-_connection = MinecraftConnection()
+_connection = Connection()
 _connection.try_connect(msg="", should_raise=False)
 
 

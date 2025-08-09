@@ -1,3 +1,5 @@
+"""java对象包装类"""
+
 from typing import Protocol
 from py4j.java_gateway import JavaObject
 
