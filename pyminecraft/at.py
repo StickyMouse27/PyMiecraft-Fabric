@@ -6,9 +6,9 @@ from abc import ABC, abstractmethod
 from enum import Enum
 
 from .utils import LOGGER
-from .javaobj_handler import Server, NamedAdvancedExecutor
+from .javaobj import Server, NamedAdvancedExecutor
 from .type_dict import TypeDict
-from .connection import get_executor
+from .connection import get_executor, get_javautils
 
 
 CallbackFunction: TypeAlias = Callable[[Server, TypeDict], None]
@@ -39,7 +39,7 @@ class Middleman:
         Args:
             server: Java端传入的服务器对象
         """
-        self.func(Server(server), self.info)
+        self.func(Server(server, get_javautils()), self.info)
 
     class Java:
         """标记为实现Java接口"""

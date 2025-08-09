@@ -5,7 +5,7 @@ Link: https://github.com/PyMinecraft/PyMinecraft-Fabric
 """
 
 from .at import *
-from .javaobj_handler import *
+from .javaobj import *
 from .utils import *
 from .connection import *
 

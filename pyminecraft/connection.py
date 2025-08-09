@@ -23,7 +23,7 @@ from py4j.java_gateway import (
 )
 
 from .utils import LOGGER
-from .javaobj_handler import NamedAdvancedExecutor, JavaUtils
+from .javaobj import NamedAdvancedExecutor, JavaUtils
 
 
 class Connection:
@@ -80,7 +80,9 @@ class Connection:
             auto_field=True,
             gateway_parameters=self.gateway_params,
         )
-        self._executor = NamedAdvancedExecutor(self._gateway.entry_point.getExecutor())  # type: ignore
+        self._executor = NamedAdvancedExecutor(
+            self._gateway.entry_point.getExecutor(),  # type: ignore
+        )
         self._javautils = JavaUtils(self._gateway.entry_point.getUtils())  # type: ignore
         self._connected = True
         return self._gateway

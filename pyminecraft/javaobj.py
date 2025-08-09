@@ -1,5 +1,6 @@
 """java对象包装类"""
 
+from abc import ABC
 from typing import Protocol
 from py4j.java_gateway import JavaObject
 
@@ -17,7 +18,7 @@ class JavaConsumer(Protocol):
         """对应java的accept方法"""
 
 
-class JavaObjectHandler:
+class JavaObjectHandler(ABC):
     """
     Java对象处理器基类
 
@@ -193,17 +194,16 @@ class Server(JavaObjectHandler):
     logger: JavaLogger
     _utlis: JavaUtils
 
-    def __init__(self, server: JavaObject) -> None:
+    def __init__(self, server: JavaObject, java_utlis: JavaUtils) -> None:
         """
         初始化服务器包装对象
 
         Args:
             server (JavaObject): Minecraft服务器Java对象
         """
-        from .connection import get_javautils
 
         super().__init__(server)
-        self._utlis = get_javautils()
+        self._utlis = java_utlis
         self.logger = self._utlis.logger
 
     def cmd(self, command: str, name: str = "PYMC"):
