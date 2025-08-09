@@ -4,7 +4,7 @@ from abc import ABC
 from typing import Protocol
 from py4j.java_gateway import JavaObject
 
-from .utils import LOGGER
+# from .utils import LOGGER
 
 
 class JavaConsumer(Protocol):
@@ -14,7 +14,7 @@ class JavaConsumer(Protocol):
     用于定义接受服务器对象并执行操作的回调函数接口
     """
 
-    def accept(self, server: JavaObject) -> None:
+    def accept(self, obj: JavaObject) -> None:
         """对应java的accept方法"""
 
 
@@ -184,6 +184,18 @@ class NamedAdvancedExecutor(JavaObjectHandler):
         self.obj.pushOnce(callback, name)  # type: ignore
 
 
+class Entity(JavaObjectHandler):
+    """对应net.minecraft.entity.Entity"""
+
+    @property
+    def name(self) -> str:
+        """获取实体名称"""
+        return self.obj.getName().getString()  # type: ignore
+
+    def move(self, movement: tuple[float, float, float]):
+        """net.minecraft.entity.Entity.move"""
+
+
 class Server(JavaObjectHandler):
     """
     Minecraft服务器对象包装类
@@ -223,7 +235,14 @@ class Server(JavaObjectHandler):
         等效于 server.logger.info
 
         Args:
-            str (str): 日志消息
+            msg (str): 日志消息
         """
-        LOGGER.debug("logging %s", msg)
         self.logger.info(msg)
+
+    # def get_entities(self, selector: str = "@e") -> list[Entity]:
+    #     """获取服务器中的实体
+
+    #     Args:
+    #         selector (str): 命令方块中的实体选择器
+    #     """
+    #     self._utlis.getEntities(selector)  # type: ignore

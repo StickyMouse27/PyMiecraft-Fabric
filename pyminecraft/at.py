@@ -84,8 +84,8 @@ class DecoratorBase(ABC):
 
         @wraps(self.func)
         def wrapper(server: Server, info: TypeDict) -> None:
-            if self.modify_when_run(server, info):
-                self.func(server, info)
+            self.modify_when_run()
+            self.func(server, info)
 
         return wrapper
 
@@ -96,19 +96,12 @@ class DecoratorBase(ABC):
         可以被子类重写以实现特定逻辑。
         """
 
-    @abstractmethod
-    def modify_when_run(self, server: Server, info: TypeDict) -> bool:
+    def modify_when_run(self) -> None:
         """
         在函数运行时执行的修改操作。
 
-        Args:
-            server (Server): 服务器实例
-            info (TypeDict): 附加信息字典
-
-        Returns:
-            bool: 是否继续执行原函数
+        可以被子类重写以实现特定逻辑。
         """
-        return True
 
 
 class AtFlag:
@@ -345,17 +338,8 @@ class After(AbstractAt):
         else:
             raise ValueError(f"Should never reached! Invalid type of flag: {flag}")
 
-    def modify_when_run(self, server: Server, info: TypeDict) -> bool:
-        """
-        在函数运行时根据标志决定是否重新安排任务执行。
-
-        Args:
-            server (Server): 服务器实例
-            info (TypeDict): 附加信息字典
-
-        Returns:
-            bool: 是否继续执行原函数
-        """
+    def modify_when_run(self) -> None:
+        """在函数运行时根据标志决定是否重新安排任务执行。"""
 
         if flag := self.flag.get(MaxTimesFlag):
             if flag.times_left > 0:
@@ -365,7 +349,6 @@ class After(AbstractAt):
                 self.cancel()
         if self.flag[RunningFlag] == RunningFlag.ALWAYS:
             self.executor.push_scheduled(self.after, self._get_middleman(), self.at)
-        return True
 
 
 class AtTick(At):

@@ -41,7 +41,7 @@ public class Utils {
             EntitySelector entitySelector = new EntitySelectorReader(new StringReader(selector), true).read();
             return entitySelector.getEntities(getCommandSource(null));
         } catch (CommandSyntaxException e) {
-            LOGGER.error("Syntax Error when getting entities ", e);
+            LOGGER.error("Syntax Error while getting entities ", e);
             return List.of();
         }
     }

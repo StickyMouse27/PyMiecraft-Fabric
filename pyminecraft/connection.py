@@ -141,7 +141,7 @@ class Connection:
             return self.connect()
         except Py4JNetworkError:
             if should_raise:
-                LOGGER.error(msg)
+                LOGGER.error("Network error: %s", msg)
                 raise
             LOGGER.info(msg)
             return None
@@ -283,7 +283,5 @@ def get_javautils() -> JavaUtils:
 
 
 def disconnect() -> None:
-    """
-    断开与Java端的连接
-    """
+    """断开与Java端的连接"""
     _connection.disconnect()
