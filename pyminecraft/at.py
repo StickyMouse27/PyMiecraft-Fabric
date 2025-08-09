@@ -1,6 +1,6 @@
 """提供装饰器，将回调函数信息传递至java端"""
 
-from typing import Callable, Type, TypeAlias
+from typing import Callable, Self, Type, TypeAlias
 from functools import wraps
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -116,15 +116,15 @@ class AtFlag:
     标志基类，为装饰器提供各种标志选项的基础类。
     """
 
-    def __rand__(self, value: "Callable[[], AbstractAt]") -> Callable:
+    def __rand__[T: AbstractAt](self, value: Callable[[], T]) -> T:
         """
         支持 & 操作符，用于将标志应用到装饰器实例。
 
         Args:
-            value (Callable[[], AbstractAt]): 返回AbstractAt实例的可调用对象
+            value (Callable[[], T]): 返回AbstractAt实例的可调用对象
 
         Returns:
-            Callable: 应用了标志的装饰器
+            T: 应用了标志的装饰器
         """
         return value() & self
 
@@ -197,7 +197,7 @@ class AbstractAt(DecoratorBase):
 
         self.executor = get_executor()
 
-    def __and__(self, other: AtFlag) -> "AbstractAt":
+    def __and__(self, other: AtFlag) -> Self:
         """
         支持 & 操作符，用于添加标志到装饰器。
 
@@ -216,7 +216,7 @@ class AbstractAt(DecoratorBase):
 
         return self
 
-    def __or__(self, other: CallbackFunction) -> "AbstractAt":
+    def __or__(self, other: CallbackFunction) -> Self:
         """
         支持 | 操作符，用于将装饰器应用到函数上。
 

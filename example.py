@@ -19,6 +19,7 @@ def start_timer(server: pymc.Server, info: pymc.TypeDict):
     server.log("Hello from pymc-fabric!")
     server.cmd("say hello!!!!!!")
 
+    # 可以使用全局变量实现，但是这不符合最佳实践
     info[dict]["timer"] = pymc.AtTickAfter(20 * 5) & pymc.ALWAYS | func_after_5_sec
     info[dict]["counter"] = 0
 

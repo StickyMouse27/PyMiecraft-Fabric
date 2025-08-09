@@ -280,3 +280,10 @@ def get_javautils() -> JavaUtils:
         JavaUtils: Java工具类包装实例
     """
     return _connection.get_javautils()
+
+
+def disconnect() -> None:
+    """
+    断开与Java端的连接
+    """
+    _connection.disconnect()
