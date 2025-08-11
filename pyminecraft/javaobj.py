@@ -56,13 +56,7 @@ class JavaObjectHandler(ABC):
         """检查对象是否为null"""
         if self._obj is None:
             return True
-        try:
-            self.to_string()  # 尝试进行操作
-            return False
-        except Py4JError as e:
-            if "Target Object is null" in str(e):
-                return True
-            raise  # 重新抛出其他异常
+        return self._gateway.jvm.java.util.Objects.isNull(self._obj)  # type: ignore
 
 
 class JavaListHandler[T: JavaObjectHandler](Sequence[T]):
