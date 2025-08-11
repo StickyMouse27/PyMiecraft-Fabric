@@ -36,6 +36,10 @@ public class Utils {
                 (Entity) null);
     }
 
+    public void sendCommand(String command, @Nullable String name) {
+        server.getCommandManager().executeWithPrefix(getCommandSource(name), command);
+    }
+
     public List<? extends Entity> getEntities(String selector) {
         try {
             EntitySelector entitySelector = new EntitySelectorReader(new StringReader(selector), true).read();

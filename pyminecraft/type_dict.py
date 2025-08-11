@@ -24,8 +24,10 @@ class TypeDict(MutableMapping[Type[Any], Any]):
         print(td[int])  # 输出: 42
     """
 
+    _data: Dict[Type[Any], Any]
+
     def __init__(self) -> None:
-        self._data: Dict[Type[Any], Any] = {}
+        self._data = {}
 
     def __setitem__[T](self, key: Type[T], value: T) -> None:
         """

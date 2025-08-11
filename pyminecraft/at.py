@@ -8,7 +8,7 @@ from enum import Enum
 from .utils import LOGGER
 from .javaobj import Server, NamedAdvancedExecutor
 from .type_dict import TypeDict
-from .connection import get_executor, get_javautils
+from .connection import get_executor, get_javautils, get_gateway
 
 
 CallbackFunction: TypeAlias = Callable[[Server, TypeDict], None]
@@ -39,7 +39,7 @@ class Middleman:
         Args:
             server: Java端传入的服务器对象
         """
-        self.func(Server(obj, get_javautils()), self.info)
+        self.func(Server(obj, get_gateway(), get_javautils()), self.info)
 
     class Java:
         """标记为实现Java接口"""
@@ -183,7 +183,7 @@ class AbstractAt(DecoratorBase):
     """
 
     at: str
-    data: TypeDict = TypeDict()
+    data: TypeDict
     executor: NamedAdvancedExecutor
     AVAILABLE_FLAGS: set[type[AtFlag]] = {RunningFlag}
 
@@ -195,6 +195,7 @@ class AbstractAt(DecoratorBase):
             at (str): 触发装饰器执行的位置
             *flags (AtFlag): 应用于装饰器的标志
         """
+        self.data = TypeDict()
 
         self.at = at
         for flag in flags:
@@ -241,11 +242,6 @@ class AbstractAt(DecoratorBase):
         """
         self(other)
         return self
-
-    def modify_when_def(self) -> None:
-        """
-        在装饰器定义时执行，处理所有已设置的标志。
-        """
 
     def _get_middleman(self) -> Middleman:
         """

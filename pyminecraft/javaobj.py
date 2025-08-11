@@ -3,7 +3,7 @@
 from abc import ABC
 from typing import Protocol, overload
 from collections.abc import Sequence
-from py4j.java_gateway import JavaObject, Py4JError
+from py4j.java_gateway import JavaObject, Py4JError, JavaGateway
 from py4j.java_collections import JavaList
 
 # from .utils import LOGGER
@@ -28,8 +28,9 @@ class JavaObjectHandler(ABC):
     """
 
     _obj: JavaObject
+    _gateway: JavaGateway
 
-    def __init__(self, java_object: JavaObject):
+    def __init__(self, java_object: JavaObject, java_gateway: JavaGateway):
         """
         初始化Java对象处理器
 
@@ -37,6 +38,7 @@ class JavaObjectHandler(ABC):
             java_object (JavaObject): 要包装的Java对象
         """
         self._obj = java_object
+        self._gateway = java_gateway
 
     def __bool__(self) -> bool:
         """判断Java对象是否存在"""
@@ -70,8 +72,11 @@ class JavaListHandler[T: JavaObjectHandler](Sequence[T]):
 
     _list: JavaList
     _item_handler_type: type[T]
+    _gateway: JavaGateway
 
-    def __init__(self, java_list: JavaList, item_handler_type: type[T]):
+    def __init__(
+        self, java_list: JavaList, java_gateway: JavaGateway, item_handler_type: type[T]
+    ):
         """
         初始化Java列表处理器
 
@@ -81,6 +86,7 @@ class JavaListHandler[T: JavaObjectHandler](Sequence[T]):
         """
         self._list = java_list
         self._item_handler_type = item_handler_type
+        self._gateway = java_gateway
 
     @overload
     def __getitem__(self, index: int) -> T: ...
@@ -101,8 +107,8 @@ class JavaListHandler[T: JavaObjectHandler](Sequence[T]):
         if isinstance(index, slice):
             # 处理切片
             sliced_list = self._list[index]
-            return JavaListHandler(sliced_list, self._item_handler_type)
-        return self._item_handler_type(self._list[index])
+            return JavaListHandler(sliced_list, self._gateway, self._item_handler_type)
+        return self._item_handler_type(self._list[index], self._gateway)
 
     def __len__(self) -> int:
         """
@@ -173,7 +179,10 @@ class JavaUtils(JavaObjectHandler):
         Returns:
             JavaLogger: Java日志记录器包装对象
         """
-        return JavaLogger(self._obj.LOGGER)  # type: ignore
+        return JavaLogger(
+            self._obj.LOGGER,  # type: ignore
+            self._gateway,
+        )
 
     @property
     def mod_id(self) -> str:
@@ -197,6 +206,16 @@ class JavaUtils(JavaObjectHandler):
         """
 
         return self._obj.getCommandSource(name)  # type: ignore
+
+    def send_command(self, command: str, name: str) -> None:
+        """
+        发送命令
+
+        Args:
+            command (str): 命令
+        """
+
+        self._obj.sendCommand(command, name)  # type: ignore
 
     def get_entities(self, selector: str) -> JavaList:
         """
@@ -315,7 +334,9 @@ class Server(JavaObjectHandler):
     logger: JavaLogger
     _utlis: JavaUtils
 
-    def __init__(self, server: JavaObject, java_utlis: JavaUtils) -> None:
+    def __init__(
+        self, server: JavaObject, java_gateway: JavaGateway, java_utlis: JavaUtils
+    ) -> None:
         """
         初始化服务器包装对象
 
@@ -323,7 +344,7 @@ class Server(JavaObjectHandler):
             server (JavaObject): Minecraft服务器Java对象
         """
 
-        super().__init__(server)
+        super().__init__(server, java_gateway)
         self._utlis = java_utlis
         self.logger = self._utlis.logger
 
@@ -355,7 +376,9 @@ class Server(JavaObjectHandler):
         Args:
             selector (str): 命令方块中的实体选择器
         """
-        return JavaListHandler(self._utlis.get_entities(selector), Entity)
+        return JavaListHandler(
+            self._utlis.get_entities(selector), self._gateway, Entity
+        )
 
     def get_entity(self, selector: str = "@e") -> Entity | None:
         """
@@ -368,4 +391,4 @@ class Server(JavaObjectHandler):
             Entity | None: 返回选中的实体，如果没有，则返回None
         """
         entity = self._utlis.get_entity(selector)
-        return Entity(entity) if entity else None
+        return Entity(entity, self._gateway) if entity else None
