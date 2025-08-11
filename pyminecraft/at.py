@@ -1,6 +1,6 @@
 """提供装饰器，将回调函数信息传递至java端"""
 
-from typing import Callable, Self, Type, TypeAlias
+from typing import Callable, Self, TypeAlias
 from functools import wraps
 from abc import ABC
 from enum import Enum
@@ -157,6 +157,20 @@ class MaxTimesFlag(AtFlag):
         """
         self.times_left = times
 
+    def step(self, when_stop: Callable[[], None] | None = None):
+        """
+        执行一次。
+
+        Args:
+            when_stop (Callable[[], None] | None, optional): 任务执行完毕时调用的函数。默认为None
+        """
+        if self.times_left > 0:
+            self.times_left -= 1
+            if self.times_left == 0:
+                self.stopped = True
+                if when_stop is not None:
+                    when_stop()
+
 
 class AbstractAt(DecoratorBase):
     """
@@ -171,7 +185,7 @@ class AbstractAt(DecoratorBase):
     at: str
     data: TypeDict = TypeDict()
     executor: NamedAdvancedExecutor
-    AVAILABLE_FLAGS: list[Type[AtFlag]] = [RunningFlag]
+    AVAILABLE_FLAGS: set[type[AtFlag]] = {RunningFlag}
 
     def __init__(self, at: str, *flags: AtFlag) -> None:
         """
@@ -232,17 +246,6 @@ class AbstractAt(DecoratorBase):
         """
         在装饰器定义时执行，处理所有已设置的标志。
         """
-        for flag_type in At.AVAILABLE_FLAGS:
-            if flag_value := self.data.get(flag_type):
-                self._sub_modify_when_def_with_flag(flag_value)
-
-    def _sub_modify_when_def_with_flag(self, flag: AtFlag) -> None:
-        """
-        根据特定标志在装饰器定义时执行相应的操作。
-
-        Args:
-            flag (AtFlag): 要处理的标志
-        """
 
     def _get_middleman(self) -> Middleman:
         """
@@ -265,27 +268,28 @@ class At(AbstractAt):
     At装饰器，用于在特定位置执行函数。
     """
 
-    def _sub_modify_when_def_with_flag(self, flag: AtFlag) -> None:
+    def modify_when_def(self) -> None:
         """
-        根据运行标志在装饰器定义时注册相应的执行器任务。
+        根据标志在装饰器定义时注册相应的延迟执行任务。
+        """
+        match flag := self.data.get(RunningFlag):
+            case None:
+                pass
+            case RunningFlag.ALWAYS:
+                LOGGER.info("push_continuous %s", self.wrapped.__name__)
+                self.executor.push_continuous(self._get_middleman(), self.at)
+            case RunningFlag.ONCE:
+                LOGGER.info("push_once %s", self.wrapped.__name__)
+                self.executor.push_once(self._get_middleman(), self.at)
+            case RunningFlag.NEVER:
+                pass
+            case _:
+                raise ValueError(f"Should never reached! Invalid running flag: {flag}")
 
-        Args:
-            flag (AtFlag): 运行标志
-        """
-        if isinstance(flag, RunningFlag):
-            match flag:
-                case RunningFlag.ALWAYS:
-                    LOGGER.info("push_continuous %s", self.wrapped.__name__)
-                    self.executor.push_continuous(self._get_middleman(), self.at)
-                case RunningFlag.ONCE:
-                    LOGGER.info("push_once %s", self.wrapped.__name__)
-                    self.executor.push_once(self._get_middleman(), self.at)
-                case RunningFlag.NEVER:
-                    pass
-                case _:
-                    raise ValueError(f"Should never reached! Invalid flag: {flag}")
-        else:
-            raise ValueError(f"Invalid type of flag: {flag}")
+    def cancel(self) -> None:
+        # TODO
+        super().cancel()
+        raise NotImplementedError
 
 
 class After(AbstractAt):
@@ -298,7 +302,7 @@ class After(AbstractAt):
     """
 
     after: int
-    AVAILABLE_FLAGS = [MaxTimesFlag, RunningFlag]
+    AVAILABLE_FLAGS = {MaxTimesFlag, RunningFlag}
 
     def __init__(
         self, at: str, after: int, flag: RunningFlag = RunningFlag.ONCE
@@ -314,45 +318,29 @@ class After(AbstractAt):
         super().__init__(at, flag)
         self.after = after
 
-    def _sub_modify_when_def_with_flag(self, flag: AtFlag) -> None:
+    def modify_when_def(self) -> None:
         """
         根据标志在装饰器定义时注册相应的延迟执行任务。
-
-        Args:
-            flag (AtFlag): 要处理的标志
         """
-        if isinstance(flag, RunningFlag):
-            match flag:
-                case RunningFlag.ALWAYS:
-                    LOGGER.info(
-                        "push_scheduled(Ready to repeat) %s", self.wrapped.__name__
-                    )
-                    self.executor.push_scheduled(
-                        self.after, self._get_middleman(), self.at
-                    )
-                case RunningFlag.ONCE:
-                    LOGGER.info("push_scheduled(Just once) %s", self.wrapped.__name__)
-                    self.executor.push_scheduled(
-                        self.after, self._get_middleman(), self.at
-                    )
-                case RunningFlag.NEVER:
-                    pass
-                case _:
-                    raise ValueError(
-                        f"Should never reached! Invalid runing flag: {flag}"
-                    )
-        else:
-            raise ValueError(f"Should never reached! Invalid type of flag: {flag}")
+        match flag := self.data.get(RunningFlag):
+            case None:
+                pass
+            case RunningFlag.ALWAYS:
+                LOGGER.info("push_scheduled(Ready to repeat) %s", self.wrapped.__name__)
+                self.executor.push_scheduled(self.after, self._get_middleman(), self.at)
+            case RunningFlag.ONCE:
+                LOGGER.info("push_scheduled(Just once) %s", self.wrapped.__name__)
+                self.executor.push_scheduled(self.after, self._get_middleman(), self.at)
+            case RunningFlag.NEVER:
+                pass
+            case _:
+                raise ValueError(f"Should never reached! Invalid runing flag: {flag}")
 
     def modify_when_run(self) -> None:
         """在函数运行时根据标志决定是否重新安排任务执行。"""
 
         if flag := self.data.get(MaxTimesFlag):
-            if flag.times_left > 0:
-                flag.times_left -= 1
-            else:
-                flag.stopped = True
-                self.cancel()
+            flag.step(self.cancel)
         if self.data[RunningFlag] == RunningFlag.ALWAYS:
             self.executor.push_scheduled(self.after, self._get_middleman(), self.at)
 

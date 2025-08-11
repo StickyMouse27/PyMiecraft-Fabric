@@ -46,4 +46,15 @@ public class Utils {
         }
     }
 
+    public @Nullable Entity getEntity(String selector) {
+        var entities = getEntities(selector);
+        if (!entities.isEmpty())
+            return getEntities(selector).getFirst();
+        return (Entity) null;
+    }
+
+    public static boolean isNull(Object obj) {
+        return obj == null;
+    }
+
 }

@@ -1,8 +1,10 @@
 """java对象包装类"""
 
 from abc import ABC
-from typing import Protocol
-from py4j.java_gateway import JavaObject
+from typing import Protocol, overload
+from collections.abc import Sequence
+from py4j.java_gateway import JavaObject, Py4JError
+from py4j.java_collections import JavaList
 
 # from .utils import LOGGER
 
@@ -25,7 +27,7 @@ class JavaObjectHandler(ABC):
     用于包装Java对象，提供统一的访问接口
     """
 
-    obj: JavaObject
+    _obj: JavaObject
 
     def __init__(self, java_object: JavaObject):
         """
@@ -34,7 +36,82 @@ class JavaObjectHandler(ABC):
         Args:
             java_object (JavaObject): 要包装的Java对象
         """
-        self.obj = java_object
+        self._obj = java_object
+
+    def __bool__(self) -> bool:
+        """判断Java对象是否存在"""
+        return not self.is_null() and self._obj is not None
+
+    def get_object(self) -> JavaObject:
+        """获取Java对象"""
+        return self._obj
+
+    def to_string(self) -> str:
+        """将Java对象转换为字符串"""
+        return str(self._obj)
+
+    def is_null(self) -> bool:
+        """检查对象是否为null"""
+        if self._obj is None:
+            return True
+        try:
+            self.to_string()  # 尝试进行操作
+            return False
+        except Py4JError as e:
+            if "Target Object is null" in str(e):
+                return True
+            raise  # 重新抛出其他异常
+
+
+class JavaListHandler[T: JavaObjectHandler](Sequence[T]):
+    """
+    Java列表包装类
+    """
+
+    _list: JavaList
+    _item_handler_type: type[T]
+
+    def __init__(self, java_list: JavaList, item_handler_type: type[T]):
+        """
+        初始化Java列表处理器
+
+        Args:
+            java_list (JavaList): 要包装的Java列表
+            item_handler_type (type[T]): 列表项处理器的类型
+        """
+        self._list = java_list
+        self._item_handler_type = item_handler_type
+
+    @overload
+    def __getitem__(self, index: int) -> T: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> Sequence[T]: ...
+
+    def __getitem__(self, index: int | slice) -> T | Sequence[T]:
+        """
+        获取指定索引处的元素
+
+        Args:
+            index (int): 元素索引
+
+        Returns:
+            T: 指定索引处的元素
+        """
+        if isinstance(index, slice):
+            # 处理切片
+            sliced_list = self._list[index]
+            return JavaListHandler(sliced_list, self._item_handler_type)
+        return self._item_handler_type(self._list[index])
+
+    def __len__(self) -> int:
+        """
+        返回列表长度
+
+        Returns:
+            int: 列表元素数量
+        """
+        return len(self._list)
 
 
 class JavaLogger(JavaObjectHandler):
@@ -51,7 +128,7 @@ class JavaLogger(JavaObjectHandler):
         Args:
             message (str): 日志消息
         """
-        self.obj.debug(message)  # type: ignore
+        self._obj.debug(message)  # type: ignore
 
     def info(self, message: str) -> None:
         """
@@ -60,7 +137,7 @@ class JavaLogger(JavaObjectHandler):
         Args:
             message (str): 日志消息
         """
-        self.obj.info(message)  # type: ignore
+        self._obj.info(message)  # type: ignore
 
     def warn(self, message: str) -> None:
         """
@@ -69,7 +146,7 @@ class JavaLogger(JavaObjectHandler):
         Args:
             message (str): 日志消息
         """
-        self.obj.warn(message)  # type: ignore
+        self._obj.warn(message)  # type: ignore
 
     def error(self, message: str) -> None:
         """
@@ -78,7 +155,7 @@ class JavaLogger(JavaObjectHandler):
         Args:
             message (str): 日志消息
         """
-        self.obj.error(message)  # type: ignore
+        self._obj.error(message)  # type: ignore
 
 
 class JavaUtils(JavaObjectHandler):
@@ -96,7 +173,7 @@ class JavaUtils(JavaObjectHandler):
         Returns:
             JavaLogger: Java日志记录器包装对象
         """
-        return JavaLogger(self.obj.LOGGER)  # type: ignore
+        return JavaLogger(self._obj.LOGGER)  # type: ignore
 
     @property
     def mod_id(self) -> str:
@@ -106,40 +183,66 @@ class JavaUtils(JavaObjectHandler):
         Returns:
             str: 模组ID字符串
         """
-        return self.obj.MOD_ID  # type: ignore
+        return self._obj.MOD_ID  # type: ignore
 
     def get_command_source(self, name: str) -> JavaObject:
         """
         获取命令源对象
 
         Args:
-            server (Server): 服务器对象
             name (str): 命令源名称
 
         Returns:
             命令源对象
         """
 
-        return self.obj.getCommandSource(name)  # type: ignore
+        return self._obj.getCommandSource(name)  # type: ignore
 
-
-class NamedExecutor(JavaObjectHandler):
-    """
-    Java命名执行器包装类
-
-    对应Java端NamedExecutor类，用于在特定时间点执行命名任务
-    """
-
-    def push(self, tick: int, callback: JavaConsumer, name: str) -> None:
+    def get_entities(self, selector: str) -> JavaList:
         """
-        添加一个在指定tick执行的命名任务
+        获取实体对象
 
         Args:
-            tick (int): 执行的tick时间点
-            callback (JavaConsumer): 回调函数
-            name (str): 任务名称
+            selector (str): 选择器
+
+        Returns:
+            实体对象
         """
-        self.obj.push(tick, callback, name)  # type: ignore
+
+        return self._obj.getEntities(selector)  # type: ignore
+
+    def get_entity(self, selector: str) -> JavaObject:
+        """
+        获取实体对象
+
+        Args:
+            selector (str): 选择器
+
+        Returns:
+            实体对象
+        """
+
+        return self._obj.getEntity(selector)  # type: ignore
+
+
+# 未使用
+# class NamedExecutor(JavaObjectHandler):
+#     """
+#     Java命名执行器包装类
+
+#     对应Java端NamedExecutor类，用于在特定时间点执行命名任务
+#     """
+
+#     def push(self, tick: int, callback: JavaConsumer, name: str) -> None:
+#         """
+#         添加一个在指定tick执行的命名任务
+
+#         Args:
+#             tick (int): 执行的tick时间点
+#             callback (JavaConsumer): 回调函数
+#             name (str): 任务名称
+#         """
+#         self._obj.push(tick, callback, name)  # type: ignore
 
 
 # This object inherits from JavaObjectHandler but not NamedExecutor
@@ -161,7 +264,7 @@ class NamedAdvancedExecutor(JavaObjectHandler):
             callback (JavaConsumer): 回调函数
             name (str): 任务名称
         """
-        self.obj.pushScheduled(tick, callback, name)  # type: ignore
+        self._obj.pushScheduled(tick, callback, name)  # type: ignore
 
     def push_continuous(self, callback: JavaConsumer, name: str) -> None:
         """
@@ -171,7 +274,7 @@ class NamedAdvancedExecutor(JavaObjectHandler):
             callback (JavaConsumer): 回调函数
             name (str): 任务名称
         """
-        self.obj.pushContinuous(callback, name)  # type: ignore
+        self._obj.pushContinuous(callback, name)  # type: ignore
 
     def push_once(self, callback: JavaConsumer, name: str) -> None:
         """
@@ -181,7 +284,7 @@ class NamedAdvancedExecutor(JavaObjectHandler):
             callback (JavaConsumer): 回调函数
             name (str): 任务名称
         """
-        self.obj.pushOnce(callback, name)  # type: ignore
+        self._obj.pushOnce(callback, name)  # type: ignore
 
 
 class Entity(JavaObjectHandler):
@@ -190,15 +293,21 @@ class Entity(JavaObjectHandler):
     @property
     def name(self) -> str:
         """获取实体名称"""
-        return self.obj.getName().getString()  # type: ignore
+        return self._obj.getName().getString()  # type: ignore
+
+    @property
+    def uuid(self) -> str:
+        """获取实体UUID"""
+        raise NotImplementedError  # TODO
 
     def move(self, movement: tuple[float, float, float]):
         """net.minecraft.entity.Entity.move"""
+        raise NotImplementedError  # TODO
 
 
 class Server(JavaObjectHandler):
     """
-    Minecraft服务器对象包装类
+    面向用户的Minecraft服务器对象包装类
 
     提供对Minecraft服务器实例的访问接口，包括命令执行和日志记录功能
     """
@@ -226,7 +335,7 @@ class Server(JavaObjectHandler):
             str (str): 要执行的命令字符串
         """
         source = self._utlis.get_command_source(name)
-        self.obj.getCommandManager().executeWithPrefix(source, command)  # type: ignore
+        self._obj.getCommandManager().executeWithPrefix(source, command)  # type: ignore
 
     def log(self, msg: str):
         """
@@ -239,10 +348,24 @@ class Server(JavaObjectHandler):
         """
         self.logger.info(msg)
 
-    # def get_entities(self, selector: str = "@e") -> list[Entity]:
-    #     """获取服务器中的实体
+    def get_entities(self, selector: str = "@e") -> JavaListHandler[Entity]:
+        """
+        获取指定实体
 
-    #     Args:
-    #         selector (str): 命令方块中的实体选择器
-    #     """
-    #     self._utlis.getEntities(selector)  # type: ignore
+        Args:
+            selector (str): 命令方块中的实体选择器
+        """
+        return JavaListHandler(self._utlis.get_entities(selector), Entity)
+
+    def get_entity(self, selector: str = "@e") -> Entity | None:
+        """
+        获取指定实体（只返回第一个）
+
+        Args:
+            selector (str, optional): 命令方块中的实体选择器. Defaults to "@e".
+
+        Returns:
+            Entity | None: 返回选中的实体，如果没有，则返回None
+        """
+        entity = self._utlis.get_entity(selector)
+        return Entity(entity) if entity else None
