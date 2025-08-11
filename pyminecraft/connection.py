@@ -82,8 +82,12 @@ class Connection:
         )
         self._executor = NamedAdvancedExecutor(
             self._gateway.entry_point.getExecutor(),  # type: ignore
+            self._gateway,
         )
-        self._javautils = JavaUtils(self._gateway.entry_point.getUtils())  # type: ignore
+        self._javautils = JavaUtils(
+            self._gateway.entry_point.getUtils(),  # type: ignore
+            self._gateway,
+        )
         self._connected = True
 
         LOGGER.info("PyMinecraft connected successfully w")

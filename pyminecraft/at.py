@@ -145,8 +145,8 @@ class MaxTimesFlag(AtFlag):
         times (int): 剩余可执行次数
     """
 
+    times_all: int
     times_left: int
-    stopped: bool = False
 
     def __init__(self, times: int) -> None:
         """
@@ -156,6 +156,7 @@ class MaxTimesFlag(AtFlag):
             times (int): 允许执行的最大次数
         """
         self.times_left = times
+        self.times_all = times
 
     def step(self, when_stop: Callable[[], None] | None = None):
         """
@@ -167,9 +168,23 @@ class MaxTimesFlag(AtFlag):
         if self.times_left > 0:
             self.times_left -= 1
             if self.times_left == 0:
-                self.stopped = True
                 if when_stop is not None:
                     when_stop()
+
+    @property
+    def stopped(self) -> bool:
+        """任务是否已停止"""
+        return self.times_left <= 0
+
+    @property
+    def the_last(self) -> bool:
+        """是否正在执行最后一次"""
+        return self.times_left == 1
+
+    @property
+    def the_first(self) -> bool:
+        """是否正在执行第一次"""
+        return self.times_left == self.times_all
 
 
 class AbstractAt(DecoratorBase):
@@ -283,7 +298,7 @@ class At(AbstractAt):
                 raise ValueError(f"Should never reached! Invalid running flag: {flag}")
 
     def cancel(self) -> None:
-        # TODO
+        # TODO: At.cancel()
         super().cancel()
         raise NotImplementedError
 

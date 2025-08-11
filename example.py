@@ -49,7 +49,7 @@ def tick(server: pymc.Server, data: pymc.TypeDict):
     server.cmd("say Wanna diamonds?")
     server.cmd("give @a diamond")
 
-    if data[pymc.MaxTimesFlag].stopped:
+    if data[pymc.MaxTimesFlag].the_last:
         print("They are full of diamonds")
 
         # pymc.connection.disconnect()
