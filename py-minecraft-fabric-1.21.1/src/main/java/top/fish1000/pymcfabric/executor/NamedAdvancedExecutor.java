@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.IntSupplier;
 
-import top.fish1000.pymcfabric.Utils;
+import top.fish1000.pymcfabric.PymcMngr;
 
 public class NamedAdvancedExecutor<T> extends NamedExecutor<T> {
 
@@ -25,14 +25,14 @@ public class NamedAdvancedExecutor<T> extends NamedExecutor<T> {
         super.tick(data, name);
         callbackContinuousList.forEach(callback -> {
             if (callback.name().equals(name)) {
-                Utils.LOGGER.info("Found callback(continuous)");
+                PymcMngr.LOGGER.info("Found callback(continuous)");
                 callback.value().accept(data);
             }
         });
         callbackOnceList.forEach(callback -> {
             if (callback.name().equals(name)) {
                 callback.value().accept(data);
-                Utils.LOGGER.info("Found callback(once), removed");
+                PymcMngr.LOGGER.info("Found callback(once), removed");
             }
         });
         callbackOnceList.removeIf(nv -> nv.name().equals(name));
@@ -45,24 +45,24 @@ public class NamedAdvancedExecutor<T> extends NamedExecutor<T> {
             callbackContinuousList.clear();
             callbackOnceList.clear();
             callbackScheduled.clear();
-            Utils.LOGGER.error("Error in callback, skipped, callback list cleared: tick{} @ {}",
+            PymcMngr.LOGGER.error("Error in callback, skipped, callback list cleared: tick{} @ {}",
                     tickSupplier.getAsInt(), name);
             e.printStackTrace();
         }
     }
 
     public void pushScheduled(int tick, Consumer<T> callback, String name) {
-        Utils.LOGGER.info("Pushing callback(scheduled): tick{} @ {}", tickSupplier.getAsInt(), name);
+        PymcMngr.LOGGER.info("Pushing callback(scheduled): tick{} @ {}", tickSupplier.getAsInt(), name);
         super.push(tick, callback, name, TickType.RELATIVE);
     }
 
     public void pushOnce(Consumer<T> callback, String name) {
-        Utils.LOGGER.info("Pushing callback(once): tick{} @ {}", tickSupplier.getAsInt(), name);
+        PymcMngr.LOGGER.info("Pushing callback(once): tick{} @ {}", tickSupplier.getAsInt(), name);
         callbackOnceList.add(new NamedValue<>(callback, name));
     }
 
     public void pushContinuous(Consumer<T> callback, String name) {
-        Utils.LOGGER.info("Pushing callback(continuous): tick{} @ {}", tickSupplier.getAsInt(), name);
+        PymcMngr.LOGGER.info("Pushing callback(continuous): tick{} @ {}", tickSupplier.getAsInt(), name);
         callbackContinuousList.add(new NamedValue<>(callback, name));
     }
 }

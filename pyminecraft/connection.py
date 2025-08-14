@@ -4,12 +4,6 @@ PyMinecraft Fabric 模块的连接管理模块
 该模块负责管理与Java端的Py4J网关连接，提供连接建立、获取网关实例、
 执行器和工具类等功能。
 同时只有一个网关连接实例存在。
-
-主要功能:
-- 建立与Java端的Py4J网关连接
-- 提供全局访问点获取网关、执行器和工具类实例
-- 处理连接异常和重试机制
-- 断开与Java端的连接并释放资源
 """
 
 import threading
@@ -23,7 +17,7 @@ from py4j.java_gateway import (
 )
 
 from .utils import LOGGER
-from .javaobj import NamedAdvancedExecutor, JavaUtils
+from .javaobj import PymcMngr
 
 
 class Connection:
@@ -38,8 +32,7 @@ class Connection:
     _lock = threading.Lock()
     _connected: bool
     _gateway: JavaGateway | None
-    _executor: NamedAdvancedExecutor | None
-    _javautils: JavaUtils | None
+    _mngr: PymcMngr | None
 
     # 全局网关参数配置
     gateway_params: GatewayParameters | None = None
@@ -53,8 +46,7 @@ class Connection:
                     # 初始化实例变量
                     cls._instance._connected = False
                     cls._instance._gateway = None
-                    cls._instance._executor = None
-                    cls._instance._javautils = None
+                    cls._instance._mngr = None
         return cls._instance
 
     def connect(self) -> JavaGateway:
@@ -80,12 +72,8 @@ class Connection:
             auto_field=True,
             gateway_parameters=self.gateway_params,
         )
-        self._executor = NamedAdvancedExecutor(
-            self._gateway.entry_point.getExecutor(),  # type: ignore
-            self._gateway,
-        )
-        self._javautils = JavaUtils(
-            self._gateway.entry_point.getUtils(),  # type: ignore
+        self._mngr = PymcMngr(
+            self._gateway.entry_point,
             self._gateway,
         )
         self._connected = True
@@ -113,9 +101,7 @@ class Connection:
                     LOGGER.error("Error while disconnecting from Java gateway: %s", e)
                 finally:
                     # 在连接关闭后清理全局变量引用
-                    self._gateway = None
-                    self._executor = None
-                    self._javautils = None
+                    del self._gateway, self._mngr
                     self._connected = False
 
             # 在新线程中执行延迟断开连接
@@ -174,43 +160,19 @@ class Connection:
             return self._gateway
         raise RuntimeError("Cannnot connect to the gateway. This should never happen.")
 
-    def get_executor(self) -> NamedAdvancedExecutor:
+    def get_mngr(self) -> PymcMngr:
         """
-        获取执行器实例（全局访问点）
-
-        如果执行器已存在则直接返回，否则尝试建立连接并获取执行器
-
-        Returns:
-            NamedAdvancedExecutor: Java执行器包装类实例
-
-        Raises:
-            RuntimeError: 当无法获取执行器实例时抛出
-        """
-        if self._executor:
-            return self._executor
-        self.try_connect()
-        if self._executor:
-            return self._executor
-        raise RuntimeError("Cannot get executor. This should never happen")
-
-    def get_javautils(self) -> JavaUtils:
-        """
-        获取Java工具类实例（全局访问点）
-
-        如果工具类实例已存在则直接返回，否则尝试建立连接并获取工具类实例
-
-        Returns:
-            JavaUtils: Java工具类包装实例
+        获取PymcMngr实例
 
         Raises:
             RuntimeError: 当无法获取工具类实例时抛出
         """
-        if self._javautils:
-            return self._javautils
+        if self._mngr:
+            return self._mngr
         self.try_connect()
-        if self._javautils:
-            return self._javautils
-        raise RuntimeError("Cannot get javautils. This should never happen")
+        if self._mngr:
+            return self._mngr
+        raise RuntimeError("Cannot get manager. This should never happen")
 
     @property
     def connected(self) -> bool:
@@ -233,24 +195,9 @@ class Connection:
         return self._gateway
 
     @property
-    def executor(self) -> NamedAdvancedExecutor | None:
-        """
-        获取执行器实例
-
-        Returns:
-            NamedAdvancedExecutor | None: 执行器实例或None
-        """
-        return self._executor
-
-    @property
-    def javautils(self) -> JavaUtils | None:
-        """
-        获取Java工具类实例
-
-        Returns:
-            JavaUtils | None: Java工具类实例或None
-        """
-        return self._javautils
+    def pymc_mngr(self) -> PymcMngr | None:
+        """获取PymcMngr实例"""
+        return self._mngr
 
 
 # 创建单例实例并尝试连接
@@ -268,24 +215,9 @@ def get_gateway() -> JavaGateway:
     return _connection.get_gateway()
 
 
-def get_executor() -> NamedAdvancedExecutor:
-    """
-    获取执行器实例的全局函数接口
-
-    Returns:
-        NamedAdvancedExecutor: Java执行器包装类实例
-    """
-    return _connection.get_executor()
-
-
-def get_javautils() -> JavaUtils:
-    """
-    获取Java工具类实例的全局函数接口
-
-    Returns:
-        JavaUtils: Java工具类包装实例
-    """
-    return _connection.get_javautils()
+def get_mngr() -> PymcMngr:
+    """获取PymcMngr实例（全局接口）"""
+    return _connection.get_mngr()
 
 
 def disconnect() -> None:

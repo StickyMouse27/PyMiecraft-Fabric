@@ -1,6 +1,6 @@
 """
 PyMiecraft Fabric
-示例文档
+示例
 
 Link: https://github.com/StickyMouse27/PyMiecraft-Fabric
 """
@@ -20,9 +20,12 @@ def start_timer(server: pymc.Server, data: pymc.TypeDict):
     server.log("Hello from pymc-fabric!")
     server.cmd("say hello!!!!!!")
 
-    # 也可以使用全局变量实现
     at = pymc.AtTickAfter(20 * 5) & pymc.ALWAYS | func_after_5_sec
     at.data[dict]["counter"] = 1
+
+    # 也可以使用全局变量实现
+    # global counter
+    # counter = 1
 
 
 def func_after_5_sec(server: pymc.Server, data: pymc.TypeDict):
@@ -59,7 +62,7 @@ def tick(server: pymc.Server, data: pymc.TypeDict):
 def entity_test(server: pymc.Server, data: pymc.TypeDict):
     """功能测试：实体"""
     server.cmd("say entity test")
-    # server.cmd("summon snowball")
+    server.cmd("summon snowball")
     entities = server.get_entities()
 
     for eneity in entities:

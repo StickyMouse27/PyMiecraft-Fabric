@@ -1,23 +1,35 @@
 """java对象包装类"""
 
 from abc import ABC
-from typing import Protocol, overload
+from typing import Callable, overload, Any, TypeAlias, TypeVar, Self
 from collections.abc import Sequence
-from py4j.java_gateway import JavaObject, Py4JError, JavaGateway
+from py4j.java_gateway import JavaObject, JavaGateway
 from py4j.java_collections import JavaList
 
-# from .utils import LOGGER
+from .type_dict import TypeDict
 
 
-class JavaConsumer(Protocol):
-    """
-    Java Consumer接口的Python协议定义
+class JavaClassFactory:
+    """提供java类实例化方法"""
 
-    用于定义接受服务器对象并执行操作的回调函数接口
-    """
+    _gateway: JavaGateway
 
-    def accept(self, obj: JavaObject) -> None:
-        """对应java的accept方法"""
+    def __init__(self, gateway: JavaGateway) -> None:
+        self._gateway = gateway
+
+    def new(self, clazz: str, *args: Any) -> JavaObject:
+        """根据类名实例化java类"""
+        return getattr(self._gateway.jvm, clazz)(*args)  # type: ignore
+
+    def new_handled[T: JavaObjectHandler](
+        self, clazz: str, handle_class: type[T], *args: Any
+    ) -> T:
+        """根据类名实例化java类并使用handle_class处理"""
+        return handle_class(self.new(clazz, *args), self._gateway)
+
+    def v3d(self, v: tuple[float, float, float]) -> JavaObject:
+        """创建Vec3d对象 net.minecraft.util.math.Vec3d"""
+        return self.new("net.minecraft.util.math.Vec3d", *v)
 
 
 class JavaObjectHandler(ABC):
@@ -29,6 +41,7 @@ class JavaObjectHandler(ABC):
 
     _obj: JavaObject
     _gateway: JavaGateway
+    _class_factory: JavaClassFactory
 
     def __init__(self, java_object: JavaObject, java_gateway: JavaGateway):
         """
@@ -39,6 +52,12 @@ class JavaObjectHandler(ABC):
         """
         self._obj = java_object
         self._gateway = java_gateway
+        self._class_factory = JavaClassFactory(java_gateway)
+
+    @classmethod
+    def default_handle(cls, java_object: JavaObject, java_gateway: JavaGateway) -> Self:
+        """返回默认实现"""
+        return cls(java_object, java_gateway)
 
     def __bool__(self) -> bool:
         """判断Java对象是否存在"""
@@ -158,12 +177,55 @@ class JavaLogger(JavaObjectHandler):
         self._obj.error(message)  # type: ignore
 
 
-class JavaUtils(JavaObjectHandler):
-    """
-    Java工具类包装
+V = TypeVar("V", bound=JavaObjectHandler)
+CallbackFunction: TypeAlias = Callable[[V, TypeDict], None]
 
-    提供对Java端Utils类的访问，包含MOD_ID和LOGGER等静态属性
+
+class Middleman[T: JavaObjectHandler]:
     """
+    中间人类，用于在Java和Python之间传递回调函数。
+
+    这个类实现了Java的Consumer接口，作为Java调用Python函数的桥梁。
+    """
+
+    def __init__(
+        self,
+        func: CallbackFunction[T],
+        handler: Callable[[JavaObject], T],
+        data: TypeDict,
+    ) -> None:
+        """
+        初始化Middleman实例。
+
+        Args:
+            func (CallbackFunction): 要被调用的Python回调函数
+            info (TypeDict): 传递给回调函数的额外信息字典
+        """
+        self.func: CallbackFunction[T] = func
+        self.data = data
+        self.handler = handler
+
+    def accept(self, obj: JavaObject) -> None:
+        """
+        Java端调用的方法，用于执行Python回调函数。
+
+        Args:
+            server: Java端传入的服务器对象
+        """
+        self.func(self.handle(obj), self.data)
+
+    def handle(self, java_object: JavaObject) -> T:
+        """包装JavaObject"""
+        return self.handler(java_object)
+
+    class Java:
+        """标记为实现Java接口"""
+
+        implements = ["java.util.function.Consumer"]
+
+
+class PymcMngr(JavaObjectHandler):
+    """top.fish1000.pymcfabric.PymcMngr"""
 
     @property
     def logger(self) -> JavaLogger:
@@ -237,29 +299,23 @@ class JavaUtils(JavaObjectHandler):
 
         return self._obj.getEntity(selector)  # type: ignore
 
+    @property
+    def server(self) -> "Server":
+        """获取服务器对象"""
 
-# 未使用
-# class NamedExecutor(JavaObjectHandler):
-#     """
-#     Java命名执行器包装类
+        return Server(
+            self._obj.server,  # type: ignore
+            self._gateway,
+            self,
+        )
 
-#     对应Java端NamedExecutor类，用于在特定时间点执行命名任务
-#     """
+    @property
+    def executor(self) -> "NamedAdvancedExecutor":
+        """获取执行器对象"""
 
-#     def push(self, tick: int, callback: JavaConsumer, name: str) -> None:
-#         """
-#         添加一个在指定tick执行的命名任务
-
-#         Args:
-#             tick (int): 执行的tick时间点
-#             callback (JavaConsumer): 回调函数
-#             name (str): 任务名称
-#         """
-#         self._obj.push(tick, callback, name)  # type: ignore
+        return NamedAdvancedExecutor(self._obj.executor, self._gateway)  # type: ignore
 
 
-# This object inherits from JavaObjectHandler but not NamedExecutor
-# because we don't want a push function interfere with the developers.
 class NamedAdvancedExecutor(JavaObjectHandler):
     """
     Java高级命名执行器包装类
@@ -268,18 +324,18 @@ class NamedAdvancedExecutor(JavaObjectHandler):
     包括计划任务、连续任务和一次性任务
     """
 
-    def push_scheduled(self, tick: int, callback: JavaConsumer, name: str) -> None:
+    def push_scheduled(self, tick: int, callback: Middleman, name: str) -> None:
         """
         添加一个计划任务，在指定tick执行一次
 
         Args:
             tick (int): 执行的tick时间点（相对当前tick）
-            callback (JavaConsumer): 回调函数
+            callback (Middleman): 回调函数
             name (str): 任务名称
         """
         self._obj.pushScheduled(tick, callback, name)  # type: ignore
 
-    def push_continuous(self, callback: JavaConsumer, name: str) -> None:
+    def push_continuous(self, callback: Middleman, name: str) -> None:
         """
         添加一个连续任务，每个tick都会执行
 
@@ -289,7 +345,7 @@ class NamedAdvancedExecutor(JavaObjectHandler):
         """
         self._obj.pushContinuous(callback, name)  # type: ignore
 
-    def push_once(self, callback: JavaConsumer, name: str) -> None:
+    def push_once(self, callback: Middleman, name: str) -> None:
         """
         添加一个一次性任务，在下一个匹配的tick执行后自动移除
 
@@ -311,25 +367,28 @@ class Entity(JavaObjectHandler):
     @property
     def uuid(self) -> str:
         """获取实体UUID"""
-        raise NotImplementedError  # TODO
+        return self._obj.getUuidAsString()  # type: ignore
 
     def move(self, movement: tuple[float, float, float]):
         """net.minecraft.entity.Entity.move"""
-        raise NotImplementedError  # TODO
+        movement_type_obj = self._class_factory.new("net.minecraft.entity.MovementType")
+        movement_obj = self._class_factory.v3d(movement)
+        self._obj.move(movement_type_obj, movement_obj)  # type: ignore
 
 
 class Server(JavaObjectHandler):
     """
     面向用户的Minecraft服务器对象包装类
+    net.minecraft.server.MinecraftServer
 
     提供对Minecraft服务器实例的访问接口，包括命令执行和日志记录功能
     """
 
     logger: JavaLogger
-    _utlis: JavaUtils
+    _mngr: PymcMngr
 
     def __init__(
-        self, server: JavaObject, java_gateway: JavaGateway, java_utlis: JavaUtils
+        self, server: JavaObject, java_gateway: JavaGateway, pymc_mngr: PymcMngr
     ) -> None:
         """
         初始化服务器包装对象
@@ -339,8 +398,8 @@ class Server(JavaObjectHandler):
         """
 
         super().__init__(server, java_gateway)
-        self._utlis = java_utlis
-        self.logger = self._utlis.logger
+        self._mngr = pymc_mngr
+        self.logger = self._mngr.logger
 
     def cmd(self, command: str, name: str = "PYMC"):
         """
@@ -349,7 +408,7 @@ class Server(JavaObjectHandler):
         Args:
             str (str): 要执行的命令字符串
         """
-        source = self._utlis.get_command_source(name)
+        source = self._mngr.get_command_source(name)
         self._obj.getCommandManager().executeWithPrefix(source, command)  # type: ignore
 
     def log(self, msg: str):
@@ -370,9 +429,7 @@ class Server(JavaObjectHandler):
         Args:
             selector (str): 命令方块中的实体选择器
         """
-        return JavaListHandler(
-            self._utlis.get_entities(selector), self._gateway, Entity
-        )
+        return JavaListHandler(self._mngr.get_entities(selector), self._gateway, Entity)
 
     def get_entity(self, selector: str = "@e") -> Entity | None:
         """
@@ -384,5 +441,5 @@ class Server(JavaObjectHandler):
         Returns:
             Entity | None: 返回选中的实体，如果没有，则返回None
         """
-        entity = self._utlis.get_entity(selector)
+        entity = self._mngr.get_entity(selector)
         return Entity(entity, self._gateway) if entity else None

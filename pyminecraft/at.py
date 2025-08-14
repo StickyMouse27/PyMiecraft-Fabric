@@ -1,63 +1,36 @@
 """提供装饰器，将回调函数信息传递至java端"""
 
-from typing import Callable, Self, TypeAlias
+from typing import Callable, Self
 from functools import wraps
 from abc import ABC
 from enum import Enum
 
+from py4j.java_gateway import JavaObject
+
 from .utils import LOGGER
-from .javaobj import Server, NamedAdvancedExecutor
+from .javaobj import (
+    JavaObjectHandler,
+    NamedAdvancedExecutor,
+    Middleman,
+    Entity,
+    Server,
+    CallbackFunction,
+)
 from .type_dict import TypeDict
-from .connection import get_executor, get_javautils, get_gateway
+from .connection import get_mngr, get_gateway
 
 
-CallbackFunction: TypeAlias = Callable[[Server, TypeDict], None]
-
-
-class Middleman:
-    """
-    中间人类，用于在Java和Python之间传递回调函数。
-
-    这个类实现了Java的Consumer接口，作为Java调用Python函数的桥梁。
-    """
-
-    def __init__(self, func: CallbackFunction, info: TypeDict) -> None:
-        """
-        初始化Middleman实例。
-
-        Args:
-            func (CallbackFunction): 要被调用的Python回调函数
-            info (TypeDict): 传递给回调函数的额外信息字典
-        """
-        self.func = func
-        self.info = info
-
-    def accept(self, obj):
-        """
-        Java端调用的方法，用于执行Python回调函数。
-
-        Args:
-            server: Java端传入的服务器对象
-        """
-        self.func(Server(obj, get_gateway(), get_javautils()), self.info)
-
-    class Java:
-        """标记为实现Java接口"""
-
-        implements = ["java.util.function.Consumer"]
-
-
-class DecoratorBase(ABC):
+class DecoratorBase[T: JavaObjectHandler](ABC):
     """
     装饰器基类，为所有装饰器提供基础功能。
 
     提供装饰器的基本结构，包括包装函数和运行时修改功能。
     """
 
-    func: CallbackFunction
-    wrapped: CallbackFunction
+    func: CallbackFunction[T]
+    wrapped: CallbackFunction[T]
 
-    def __call__(self, func: CallbackFunction) -> CallbackFunction:
+    def __call__(self, func: CallbackFunction[T]) -> CallbackFunction[T]:
         """
         使类实例可调用，作为装饰器使用。
 
@@ -74,18 +47,19 @@ class DecoratorBase(ABC):
 
         return self.wrapped
 
-    def _get_wrapper(self) -> CallbackFunction:
+    def _get_wrapper(self) -> CallbackFunction[T]:
         """
         创建包装函数，处理函数调用逻辑。
 
         Returns:
-            CallbackFunction: 包装后的函数
+            CallbackFunctionBase: 包装后的函数
         """
 
         @wraps(self.func)
-        def wrapper(server: Server, info: TypeDict) -> None:
-            self.func(server, info)
-            self.modify_when_run()
+        def wrapper(obj: T, data: TypeDict) -> None:
+            if not self.modify_before_run(obj):
+                self.func(obj, data)
+                self.modify_after_run()
 
         return wrapper
 
@@ -96,11 +70,20 @@ class DecoratorBase(ABC):
         可以被子类重写以实现特定逻辑。
         """
 
-    def modify_when_run(self) -> None:
+    def modify_after_run(self) -> None:
         """
         在函数运行时执行的修改操作。
 
         可以被子类重写以实现特定逻辑。
+        """
+
+    def modify_before_run(self, obj: T) -> None | bool:
+        """
+        在函数运行之前执行的修改操作。
+
+        可以被子类重写以实现特定逻辑。
+
+        返回True则不执行函数，返回False或者None则执行函数。
         """
 
 
@@ -109,17 +92,22 @@ class AtFlag:
     标志基类，为装饰器提供各种标志选项的基础类。
     """
 
-    def __rand__[T: AbstractAt](self, value: Callable[[], T]) -> T:
+    def __rand__[T: AbstractAt](
+        self, value: Callable[[CallbackFunction], T]
+    ) -> Callable[[CallbackFunction], T]:
         """
-        支持 & 操作符，用于将标志应用到装饰器实例。
+        支持反向的 & 操作符。
 
         Args:
-            value (Callable[[], T]): 返回AbstractAt实例的可调用对象
-
-        Returns:
-            T: 应用了标志的装饰器
+            value: 要绑定的 At 类型
         """
-        return value() & self
+
+        @wraps(value)
+        def wrapper(func: CallbackFunction) -> T:
+            value(func)
+            return value(func) & self
+
+        return wrapper
 
 
 class RunningFlag(AtFlag, Enum):
@@ -187,7 +175,7 @@ class MaxTimesFlag(AtFlag):
         return self.times_left == self.times_all
 
 
-class AbstractAt(DecoratorBase):
+class AbstractAt[T: JavaObjectHandler](DecoratorBase[T]):
     """
     抽象的At装饰器类，为实现的At装饰器提供基础实现。
 
@@ -200,9 +188,12 @@ class AbstractAt(DecoratorBase):
     at: str
     data: TypeDict
     executor: NamedAdvancedExecutor
-    AVAILABLE_FLAGS: set[type[AtFlag]] = {RunningFlag}
+    arg_type: type[T]
+    AVAILABLE_FLAGS: tuple[type[AtFlag], ...] = (RunningFlag,)
 
-    def __init__(self, at: str, *flags: AtFlag) -> None:
+    def __init__(
+        self, at: str, arg_type: type[T] = JavaObjectHandler, *flags: AtFlag
+    ) -> None:
         """
         初始化AbstractAt实例。
 
@@ -224,7 +215,9 @@ class AbstractAt(DecoratorBase):
 
         self.data[type(self)] = self
 
-        self.executor = get_executor()
+        self.executor = get_mngr().executor
+
+        self.arg_type = arg_type
 
     def __and__(self, other: AtFlag) -> Self:
         """
@@ -245,7 +238,7 @@ class AbstractAt(DecoratorBase):
 
         return self
 
-    def __or__(self, other: CallbackFunction) -> Self:
+    def __or__(self, other: CallbackFunction[T]) -> Self:
         """
         支持 | 操作符，用于将装饰器应用到函数上。
 
@@ -265,7 +258,11 @@ class AbstractAt(DecoratorBase):
         Returns:
             Middleman: 中间人实例
         """
-        return Middleman(self.wrapped, self.data)
+        return Middleman(self.wrapped, self.handle, self.data)
+
+    def handle(self, java_object: JavaObject) -> T:
+        """包装java对象"""
+        return self.arg_type(java_object, get_gateway())
 
     def cancel(self) -> None:
         """
@@ -274,15 +271,12 @@ class AbstractAt(DecoratorBase):
         self.data[RunningFlag] = RunningFlag.NEVER
 
 
-class At(AbstractAt):
+class At[T: JavaObjectHandler](AbstractAt[T]):
     """
     At装饰器，用于在特定位置执行函数。
     """
 
     def modify_when_def(self) -> None:
-        """
-        根据标志在装饰器定义时注册相应的延迟执行任务。
-        """
         match flag := self.data.get(RunningFlag):
             case None:
                 pass
@@ -303,7 +297,7 @@ class At(AbstractAt):
         raise NotImplementedError
 
 
-class After(AbstractAt):
+class After[T: JavaObjectHandler](AbstractAt[T]):
     """
     After装饰器，在特定位置处，并等待之后一段时间执行函数。
 
@@ -313,10 +307,14 @@ class After(AbstractAt):
     """
 
     after: int
-    AVAILABLE_FLAGS = {MaxTimesFlag, RunningFlag}
+    AVAILABLE_FLAGS = MaxTimesFlag, RunningFlag
 
     def __init__(
-        self, at: str, after: int, flag: RunningFlag = RunningFlag.ONCE
+        self,
+        at: str,
+        after: int,
+        arg_type: type[T] = JavaObjectHandler,
+        *flags: RunningFlag,
     ) -> None:
         """
         初始化After装饰器实例。
@@ -326,13 +324,10 @@ class After(AbstractAt):
             after (int): 延迟执行的时间（tick单位）
             flag (RunningFlag): 运行标志，默认为ONCE
         """
-        super().__init__(at, flag)
+        super().__init__(at, arg_type, *flags)
         self.after = after
 
     def modify_when_def(self) -> None:
-        """
-        根据标志在装饰器定义时注册相应的延迟执行任务。
-        """
         match flag := self.data.get(RunningFlag):
             case None:
                 pass
@@ -347,36 +342,25 @@ class After(AbstractAt):
             case _:
                 raise ValueError(f"Should never reached! Invalid runing flag: {flag}")
 
-    def modify_when_run(self) -> None:
-        """在函数运行时根据标志决定是否重新安排任务执行。"""
-
+    def modify_after_run(self) -> None:
         if flag := self.data.get(MaxTimesFlag):
             flag.step(self.cancel)
         if self.data[RunningFlag] == RunningFlag.ALWAYS:
             self.executor.push_scheduled(self.after, self._get_middleman(), self.at)
 
 
-class AtTick(At):
-    """
-    AtTick装饰器，在每个游戏tick执行函数。
-    """
+class AtTick(At[Server]):
+    """AtTick装饰器，在每个游戏tick执行函数。"""
 
-    def __init__(self, flag: RunningFlag = RunningFlag.ONCE) -> None:
-        """
-        初始化AtTick装饰器实例。
-
-        Args:
-            flag (RunningFlag): 运行标志，默认为ONCE
-        """
-        super().__init__("tick", flag)
+    def __init__(self, func: CallbackFunction[Server]) -> None:
+        super().__init__("tick", Server)
+        self(func)
 
 
-class AtTickAfter(After):
-    """
-    AtTickAfter装饰器，在指定数量的tick之后执行函数。
-    """
+class AtTickAfter(After[Server]):
+    """AtTickAfter装饰器，在指定数量的tick之后执行函数。"""
 
-    def __init__(self, after: int, flag: RunningFlag = RunningFlag.ONCE) -> None:
+    def __init__(self, after: int, *flags: RunningFlag) -> None:
         """
         初始化AtTickAfter装饰器实例。
 
@@ -384,4 +368,33 @@ class AtTickAfter(After):
             after (int): 延迟执行的tick数
             flag (RunningFlag): 运行标志，默认为ONCE
         """
-        super().__init__("tick", after, flag)
+        super().__init__("tick", after, Server, *flags)
+
+
+class AtEntityInteract(At[Entity]):
+    """
+    AtEntityInteract装饰器类
+
+    用于在特定实体被交互时执行任务
+    """
+
+    entity: str
+    match_name: bool
+
+    def __init__(
+        self,
+        entity: str,
+        *flags: RunningFlag,
+        match_name: bool = False,
+    ) -> None:
+        super().__init__("entity interact", Entity, *flags)
+
+        self.entity = entity
+        self.match_name = match_name
+
+    def modify_before_run(self, obj: Entity) -> None | bool:
+        if self.match_name:
+            if obj.name == self.entity:
+                return False
+
+        return True

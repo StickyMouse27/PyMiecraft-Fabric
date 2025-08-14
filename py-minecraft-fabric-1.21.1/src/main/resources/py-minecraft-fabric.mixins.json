@@ -3,7 +3,8 @@
 	"package": "top.fish1000.pymcfabric.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
-		"PyMinecraftMixin"
+		"ServerMixin",
+		"EntityMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

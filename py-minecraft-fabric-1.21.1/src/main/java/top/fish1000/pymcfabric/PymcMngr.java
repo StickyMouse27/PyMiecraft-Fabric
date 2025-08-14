@@ -18,29 +18,40 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.Vec2f;
 import net.minecraft.util.math.Vec3d;
+import py4j.GatewayServer;
+import top.fish1000.pymcfabric.executor.NamedAdvancedExecutor;
 
-public class Utils {
+public class PymcMngr {
     public static final String MOD_ID = "py-minecraft-fabric";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
-    MinecraftServer server;
+    public static @Nullable NamedAdvancedExecutor<Object> executor;
+    public static @Nullable GatewayServer gatewayServer;
+    public static @Nullable MinecraftServer server;
 
-    public Utils(MinecraftServer server) {
-        this.server = server;
+    public static boolean py4jStarted = false;
+
+    public static void tick(String name) {
+        tick(name, server);
     }
 
-    public ServerCommandSource getCommandSource(@Nullable String name) {
+    public static void tick(String name, Object data) {
+        if (executor != null && py4jStarted)
+            executor.tryTick(data, name);
+    }
+
+    public static ServerCommandSource getCommandSource(@Nullable String name) {
         ServerWorld serverWorld = server.getOverworld();
         return new ServerCommandSource(server, serverWorld == null ? Vec3d.ZERO : Vec3d.of(serverWorld.getSpawnPos()),
                 Vec2f.ZERO, serverWorld, 4, "PYMC", Text.literal(name == null ? "PYMC" : name), server,
                 (Entity) null);
     }
 
-    public void sendCommand(String command, @Nullable String name) {
+    public static void sendCommand(String command, @Nullable String name) {
         server.getCommandManager().executeWithPrefix(getCommandSource(name), command);
     }
 
-    public List<? extends Entity> getEntities(String selector) {
+    public static List<? extends Entity> getEntities(String selector) {
         try {
             EntitySelector entitySelector = new EntitySelectorReader(new StringReader(selector), true).read();
             return entitySelector.getEntities(getCommandSource(null));
@@ -50,15 +61,10 @@ public class Utils {
         }
     }
 
-    public @Nullable Entity getEntity(String selector) {
+    public static @Nullable Entity getEntity(String selector) {
         var entities = getEntities(selector);
         if (!entities.isEmpty())
             return getEntities(selector).getFirst();
         return (Entity) null;
     }
-
-    public static boolean isNull(Object obj) {
-        return obj == null;
-    }
-
 }
