@@ -192,7 +192,7 @@ class AbstractAt[T: JavaObjectHandler](DecoratorBase[T]):
     AVAILABLE_FLAGS: tuple[type[AtFlag], ...] = (RunningFlag,)
 
     def __init__(
-        self, at: str, arg_type: type[T] = JavaObjectHandler, *flags: AtFlag
+        self, at: str, *flags: AtFlag, arg_type: type[T] = JavaObjectHandler
     ) -> None:
         """
         初始化AbstractAt实例。
@@ -313,8 +313,8 @@ class After[T: JavaObjectHandler](AbstractAt[T]):
         self,
         at: str,
         after: int,
-        arg_type: type[T] = JavaObjectHandler,
         *flags: RunningFlag,
+        arg_type: type[T] = JavaObjectHandler,
     ) -> None:
         """
         初始化After装饰器实例。
@@ -324,7 +324,7 @@ class After[T: JavaObjectHandler](AbstractAt[T]):
             after (int): 延迟执行的时间（tick单位）
             flag (RunningFlag): 运行标志，默认为ONCE
         """
-        super().__init__(at, arg_type, *flags)
+        super().__init__(at, *flags, arg_type=arg_type)
         self.after = after
 
     def modify_when_def(self) -> None:
@@ -353,7 +353,7 @@ class AtTick(At[Server]):
     """AtTick装饰器，在每个游戏tick执行函数。"""
 
     def __init__(self, func: CallbackFunction[Server]) -> None:
-        super().__init__("tick", Server)
+        super().__init__("tick", arg_type=Server)
         self(func)
 
 
@@ -368,7 +368,7 @@ class AtTickAfter(After[Server]):
             after (int): 延迟执行的tick数
             flag (RunningFlag): 运行标志，默认为ONCE
         """
-        super().__init__("tick", after, Server, *flags)
+        super().__init__("tick", after, *flags, arg_type=Server)
 
 
 class AtEntityInteract(At[Entity]):
@@ -387,7 +387,7 @@ class AtEntityInteract(At[Entity]):
         *flags: RunningFlag,
         match_name: bool = False,
     ) -> None:
-        super().__init__("entity interact", Entity, *flags)
+        super().__init__("entity interact", *flags, arg_type=Entity)
 
         self.entity = entity
         self.match_name = match_name
