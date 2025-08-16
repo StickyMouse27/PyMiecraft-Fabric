@@ -72,10 +72,7 @@ class Connection:
             auto_field=True,
             gateway_parameters=self.gateway_params,
         )
-        self._mngr = PymcMngr(
-            self._gateway.entry_point,
-            self._gateway,
-        )
+        self._mngr = PymcMngr.from_gateway(self._gateway)
         self._connected = True
 
         LOGGER.info("PyMinecraft connected successfully w")

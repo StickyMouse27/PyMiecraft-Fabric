@@ -12,24 +12,28 @@ from .type_dict import TypeDict
 class JavaClassFactory:
     """提供java类实例化方法"""
 
-    _gateway: JavaGateway
+    gateway: JavaGateway
 
     def __init__(self, gateway: JavaGateway) -> None:
-        self._gateway = gateway
+        self.gateway = gateway
 
     def new(self, clazz: str, *args: Any) -> JavaObject:
         """根据类名实例化java类"""
-        return getattr(self._gateway.jvm, clazz)(*args)  # type: ignore
+        return getattr(self.gateway.jvm, clazz)(*args)  # type: ignore
+
+    def get_static(self, clazz: str, field: str) -> JavaObject:
+        """获取静态类实例"""
+        return getattr(getattr(self.gateway.jvm, clazz), field)
 
     def new_handled[T: JavaObjectHandler](
         self, clazz: str, handle_class: type[T], *args: Any
     ) -> T:
         """根据类名实例化java类并使用handle_class处理"""
-        return handle_class(self.new(clazz, *args), self._gateway)
+        return handle_class(self.new(clazz, *args), self.gateway)
 
     def v3d(self, v: tuple[float, float, float]) -> JavaObject:
         """创建Vec3d对象 net.minecraft.util.math.Vec3d"""
-        return self.new("net.minecraft.util.math.Vec3d", *v)
+        return self.new("net.minecraft.util.math.Vec3d", *(float(w) for w in v))
 
 
 class JavaObjectHandler(ABC):
@@ -39,9 +43,9 @@ class JavaObjectHandler(ABC):
     用于包装Java对象，提供统一的访问接口
     """
 
-    _obj: JavaObject
-    _gateway: JavaGateway
-    _class_factory: JavaClassFactory
+    obj: JavaObject
+    gateway: JavaGateway
+    class_factory: JavaClassFactory
 
     def __init__(self, java_object: JavaObject, java_gateway: JavaGateway):
         """
@@ -50,9 +54,9 @@ class JavaObjectHandler(ABC):
         Args:
             java_object (JavaObject): 要包装的Java对象
         """
-        self._obj = java_object
-        self._gateway = java_gateway
-        self._class_factory = JavaClassFactory(java_gateway)
+        self.obj = java_object
+        self.gateway = java_gateway
+        self.class_factory = JavaClassFactory(java_gateway)
 
     @classmethod
     def default_handle(cls, java_object: JavaObject, java_gateway: JavaGateway) -> Self:
@@ -61,21 +65,21 @@ class JavaObjectHandler(ABC):
 
     def __bool__(self) -> bool:
         """判断Java对象是否存在"""
-        return not self.is_null() and self._obj is not None
+        return not self.is_null() and self.obj is not None
 
     def get_object(self) -> JavaObject:
         """获取Java对象"""
-        return self._obj
+        return self.obj
 
     def to_string(self) -> str:
         """将Java对象转换为字符串"""
-        return str(self._obj)
+        return str(self.obj)
 
     def is_null(self) -> bool:
         """检查对象是否为null"""
-        if self._obj is None:
+        if self.obj is None:
             return True
-        return self._gateway.jvm.java.util.Objects.isNull(self._obj)  # type: ignore
+        return self.gateway.jvm.java.util.Objects.isNull(self.obj)  # type: ignore
 
 
 class JavaListHandler[T: JavaObjectHandler](Sequence[T]):
@@ -147,7 +151,7 @@ class JavaLogger(JavaObjectHandler):
         Args:
             message (str): 日志消息
         """
-        self._obj.debug(message)  # type: ignore
+        self.obj.debug(message)  # type: ignore
 
     def info(self, message: str) -> None:
         """
@@ -156,7 +160,7 @@ class JavaLogger(JavaObjectHandler):
         Args:
             message (str): 日志消息
         """
-        self._obj.info(message)  # type: ignore
+        self.obj.info(message)  # type: ignore
 
     def warn(self, message: str) -> None:
         """
@@ -165,7 +169,7 @@ class JavaLogger(JavaObjectHandler):
         Args:
             message (str): 日志消息
         """
-        self._obj.warn(message)  # type: ignore
+        self.obj.warn(message)  # type: ignore
 
     def error(self, message: str) -> None:
         """
@@ -174,7 +178,7 @@ class JavaLogger(JavaObjectHandler):
         Args:
             message (str): 日志消息
         """
-        self._obj.error(message)  # type: ignore
+        self.obj.error(message)  # type: ignore
 
 
 V = TypeVar("V", bound=JavaObjectHandler)
@@ -227,6 +231,10 @@ class Middleman[T: JavaObjectHandler]:
 class PymcMngr(JavaObjectHandler):
     """top.fish1000.pymcfabric.PymcMngr"""
 
+    @staticmethod
+    def from_gateway(gateway: JavaGateway):
+        return PymcMngr(gateway.entry_point, gateway)
+
     @property
     def logger(self) -> JavaLogger:
         """
@@ -236,8 +244,8 @@ class PymcMngr(JavaObjectHandler):
             JavaLogger: Java日志记录器包装对象
         """
         return JavaLogger(
-            self._obj.LOGGER,  # type: ignore
-            self._gateway,
+            self.obj.LOGGER,  # type: ignore
+            self.gateway,
         )
 
     @property
@@ -248,7 +256,7 @@ class PymcMngr(JavaObjectHandler):
         Returns:
             str: 模组ID字符串
         """
-        return self._obj.MOD_ID  # type: ignore
+        return self.obj.MOD_ID  # type: ignore
 
     def get_command_source(self, name: str) -> JavaObject:
         """
@@ -261,7 +269,7 @@ class PymcMngr(JavaObjectHandler):
             命令源对象
         """
 
-        return self._obj.getCommandSource(name)  # type: ignore
+        return self.obj.getCommandSource(name)  # type: ignore
 
     def send_command(self, command: str, name: str) -> None:
         """
@@ -271,7 +279,7 @@ class PymcMngr(JavaObjectHandler):
             command (str): 命令
         """
 
-        self._obj.sendCommand(command, name)  # type: ignore
+        self.obj.sendCommand(command, name)  # type: ignore
 
     def get_entities(self, selector: str) -> JavaList:
         """
@@ -284,7 +292,7 @@ class PymcMngr(JavaObjectHandler):
             实体对象
         """
 
-        return self._obj.getEntities(selector)  # type: ignore
+        return self.obj.getEntities(selector)  # type: ignore
 
     def get_entity(self, selector: str) -> JavaObject:
         """
@@ -297,23 +305,22 @@ class PymcMngr(JavaObjectHandler):
             实体对象
         """
 
-        return self._obj.getEntity(selector)  # type: ignore
+        return self.obj.getEntity(selector)  # type: ignore
 
     @property
     def server(self) -> "Server":
         """获取服务器对象"""
 
         return Server(
-            self._obj.server,  # type: ignore
-            self._gateway,
-            self,
+            self.obj.server,  # type: ignore
+            self.gateway,
         )
 
     @property
     def executor(self) -> "NamedAdvancedExecutor":
         """获取执行器对象"""
 
-        return NamedAdvancedExecutor(self._obj.executor, self._gateway)  # type: ignore
+        return NamedAdvancedExecutor(self.obj.executor, self.gateway)  # type: ignore
 
 
 class NamedAdvancedExecutor(JavaObjectHandler):
@@ -333,7 +340,7 @@ class NamedAdvancedExecutor(JavaObjectHandler):
             callback (Middleman): 回调函数
             name (str): 任务名称
         """
-        self._obj.pushScheduled(tick, callback, name)  # type: ignore
+        self.obj.pushScheduled(tick, callback, name)  # type: ignore
 
     def push_continuous(self, callback: Middleman, name: str) -> None:
         """
@@ -343,7 +350,7 @@ class NamedAdvancedExecutor(JavaObjectHandler):
             callback (JavaConsumer): 回调函数
             name (str): 任务名称
         """
-        self._obj.pushContinuous(callback, name)  # type: ignore
+        self.obj.pushContinuous(callback, name)  # type: ignore
 
     def push_once(self, callback: Middleman, name: str) -> None:
         """
@@ -353,7 +360,7 @@ class NamedAdvancedExecutor(JavaObjectHandler):
             callback (JavaConsumer): 回调函数
             name (str): 任务名称
         """
-        self._obj.pushOnce(callback, name)  # type: ignore
+        self.obj.pushOnce(callback, name)  # type: ignore
 
 
 class Entity(JavaObjectHandler):
@@ -362,18 +369,20 @@ class Entity(JavaObjectHandler):
     @property
     def name(self) -> str:
         """获取实体名称"""
-        return self._obj.getName().getString()  # type: ignore
+        return self.obj.getName().getString()  # type: ignore
 
     @property
     def uuid(self) -> str:
         """获取实体UUID"""
-        return self._obj.getUuidAsString()  # type: ignore
+        return self.obj.getUuidAsString()  # type: ignore
 
     def move(self, movement: tuple[float, float, float]):
         """net.minecraft.entity.Entity.move"""
-        movement_type_obj = self._class_factory.new("net.minecraft.entity.MovementType")
-        movement_obj = self._class_factory.v3d(movement)
-        self._obj.move(movement_type_obj, movement_obj)  # type: ignore
+        movement_type = self.class_factory.get_static(
+            "net.minecraft.entity.MovementType", "SELF"
+        )
+        movement_obj = self.class_factory.v3d(movement)
+        self.obj.move(movement_type, movement_obj)  # type: ignore
 
 
 class Server(JavaObjectHandler):
@@ -385,21 +394,12 @@ class Server(JavaObjectHandler):
     """
 
     logger: JavaLogger
-    _mngr: PymcMngr
+    mngr: PymcMngr
 
-    def __init__(
-        self, server: JavaObject, java_gateway: JavaGateway, pymc_mngr: PymcMngr
-    ) -> None:
-        """
-        初始化服务器包装对象
-
-        Args:
-            server (JavaObject): Minecraft服务器Java对象
-        """
-
+    def __init__(self, server: JavaObject, java_gateway: JavaGateway) -> None:
         super().__init__(server, java_gateway)
-        self._mngr = pymc_mngr
-        self.logger = self._mngr.logger
+        self.mngr = PymcMngr.from_gateway(java_gateway)
+        self.logger = self.mngr.logger
 
     def cmd(self, command: str, name: str = "PYMC"):
         """
@@ -408,8 +408,8 @@ class Server(JavaObjectHandler):
         Args:
             str (str): 要执行的命令字符串
         """
-        source = self._mngr.get_command_source(name)
-        self._obj.getCommandManager().executeWithPrefix(source, command)  # type: ignore
+        source = self.mngr.get_command_source(name)
+        self.obj.getCommandManager().executeWithPrefix(source, command)  # type: ignore
 
     def log(self, msg: str):
         """
@@ -429,7 +429,7 @@ class Server(JavaObjectHandler):
         Args:
             selector (str): 命令方块中的实体选择器
         """
-        return JavaListHandler(self._mngr.get_entities(selector), self._gateway, Entity)
+        return JavaListHandler(self.mngr.get_entities(selector), self.gateway, Entity)
 
     def get_entity(self, selector: str = "@e") -> Entity | None:
         """
@@ -441,5 +441,5 @@ class Server(JavaObjectHandler):
         Returns:
             Entity | None: 返回选中的实体，如果没有，则返回None
         """
-        entity = self._mngr.get_entity(selector)
-        return Entity(entity, self._gateway) if entity else None
+        entity = self.mngr.get_entity(selector)
+        return Entity(entity, self.gateway) if entity else None

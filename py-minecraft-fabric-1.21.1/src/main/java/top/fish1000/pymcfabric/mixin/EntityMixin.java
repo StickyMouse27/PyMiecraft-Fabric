@@ -6,7 +6,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.At;
 
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.MovementType;
 import net.minecraft.util.ActionResult;
+import net.minecraft.util.math.Vec3d;
 import top.fish1000.pymcfabric.PymcMngr;
 
 @Mixin(Entity.class)
