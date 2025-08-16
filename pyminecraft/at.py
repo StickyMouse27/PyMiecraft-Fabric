@@ -9,7 +9,7 @@ from py4j.java_gateway import JavaObject
 
 from .utils import LOGGER
 from .javaobj import (
-    JavaObjectHandler,
+    JavaObjectProxy,
     NamedAdvancedExecutor,
     Middleman,
     Entity,
@@ -20,7 +20,7 @@ from .type_dict import TypeDict
 from .connection import get_mngr, get_gateway
 
 
-class DecoratorBase[T: JavaObjectHandler](ABC):
+class DecoratorBase[T: JavaObjectProxy](ABC):
     """
     装饰器基类，为所有装饰器提供基础功能。
 
@@ -175,7 +175,7 @@ class MaxTimesFlag(AtFlag):
         return self.times_left == self.times_all
 
 
-class AbstractAt[T: JavaObjectHandler](DecoratorBase[T]):
+class AbstractAt[T: JavaObjectProxy](DecoratorBase[T]):
     """
     抽象的At装饰器类，为实现的At装饰器提供基础实现。
 
@@ -192,7 +192,7 @@ class AbstractAt[T: JavaObjectHandler](DecoratorBase[T]):
     AVAILABLE_FLAGS: tuple[type[AtFlag], ...] = (RunningFlag,)
 
     def __init__(
-        self, at: str, *flags: AtFlag, arg_type: type[T] = JavaObjectHandler
+        self, at: str, *flags: AtFlag, arg_type: type[T] = JavaObjectProxy
     ) -> None:
         """
         初始化AbstractAt实例。
@@ -271,7 +271,7 @@ class AbstractAt[T: JavaObjectHandler](DecoratorBase[T]):
         self.data[RunningFlag] = RunningFlag.NEVER
 
 
-class At[T: JavaObjectHandler](AbstractAt[T]):
+class At[T: JavaObjectProxy](AbstractAt[T]):
     """
     At装饰器，用于在特定位置执行函数。
     """
@@ -297,7 +297,7 @@ class At[T: JavaObjectHandler](AbstractAt[T]):
         raise NotImplementedError
 
 
-class After[T: JavaObjectHandler](AbstractAt[T]):
+class After[T: JavaObjectProxy](AbstractAt[T]):
     """
     After装饰器，在特定位置处，并等待之后一段时间执行函数。
 
@@ -314,7 +314,7 @@ class After[T: JavaObjectHandler](AbstractAt[T]):
         at: str,
         after: int,
         *flags: RunningFlag,
-        arg_type: type[T] = JavaObjectHandler,
+        arg_type: type[T] = JavaObjectProxy,
     ) -> None:
         """
         初始化After装饰器实例。

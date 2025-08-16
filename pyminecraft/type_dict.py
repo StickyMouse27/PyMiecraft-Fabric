@@ -1,35 +1,35 @@
 """类型字典支持"""
 
 from typing import (
-    ItemsView,
     KeysView,
-    Type,
-    Dict,
+    ItemsView,
+    ValuesView,
     Any,
     Optional,
     Iterator,
-    ValuesView,
 )
 from collections.abc import MutableMapping
 
 
-class TypeDict(MutableMapping[Type[Any], Any]):
+class TypeDict(MutableMapping[type[Any], Any]):
     """
     一个类似字典的类，使用值的类型作为键
 
     示例:
-        td = TypeDict()
-        td[int] = 42
-        td[str] = "hello"
-        print(td[int])  # 输出: 42
+    ```
+    td = TypeDict()
+    td[int] = 42
+    td[str] = "hello"
+    print(td[int])  # 输出: 42
+    ```
     """
 
-    _data: Dict[Type[Any], Any]
+    _data: dict[type[Any], Any]
 
     def __init__(self) -> None:
         self._data = {}
 
-    def __setitem__[T](self, key: Type[T], value: T) -> None:
+    def __setitem__[T](self, key: type[T], value: T) -> None:
         """
         设置指定类型的值
 
@@ -41,7 +41,7 @@ class TypeDict(MutableMapping[Type[Any], Any]):
             raise TypeError(f"Value {value} is not an instance of {key}")
         self._data[key] = value
 
-    def __getitem__[T](self, key: Type[T]) -> T:
+    def __getitem__[T](self, key: type[T]) -> T:
         """
         获取指定类型的值
 
@@ -56,7 +56,7 @@ class TypeDict(MutableMapping[Type[Any], Any]):
         """
         return self._data[key]
 
-    def __delitem__(self, key: Type[Any]) -> None:
+    def __delitem__(self, key: type[Any]) -> None:
         """
         删除指定类型的值
 
@@ -68,7 +68,7 @@ class TypeDict(MutableMapping[Type[Any], Any]):
         """
         del self._data[key]
 
-    def __iter__(self) -> Iterator[Type[Any]]:
+    def __iter__(self) -> Iterator[type[Any]]:
         """
         迭代所有存储的类型键
 
@@ -98,7 +98,7 @@ class TypeDict(MutableMapping[Type[Any], Any]):
         """
         return key in self._data
 
-    def get[T](self, key: Type[T], default: Optional[T] = None) -> Optional[T]:
+    def get[T](self, key: type[T], default: Optional[T] = None) -> Optional[T]:
         """
         获取指定类型的值，如果不存在则返回默认值
 
@@ -111,7 +111,7 @@ class TypeDict(MutableMapping[Type[Any], Any]):
         """
         return self._data.get(key, default)
 
-    def setdefault[T](self, key: Type[T], default: T = None) -> T:
+    def setdefault[T](self, key: type[T], default: T = None) -> T:
         """
         如果指定类型不存在，则设置默认值并返回
 
@@ -132,7 +132,7 @@ class TypeDict(MutableMapping[Type[Any], Any]):
         """
         self._data.clear()
 
-    def keys(self) -> KeysView[Type[Any]]:
+    def keys(self) -> KeysView[type[Any]]:
         """
         返回所有类型键的视图
 
@@ -150,7 +150,7 @@ class TypeDict(MutableMapping[Type[Any], Any]):
         """
         return self._data.values()
 
-    def items(self) -> ItemsView[Type[Any], Any]:
+    def items(self) -> ItemsView[type[Any], Any]:
         """
         返回所有键值对的视图
 

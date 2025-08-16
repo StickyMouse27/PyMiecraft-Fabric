@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO)
 def start_timer(server: pymc.Server, data: pymc.TypeDict):
     """开始倒计时"""
     print("Say hello to mc")
-    server.log("Hello from pymc-fabric!")
+    server.mngr.log("Hello from pymc-fabric!")
     server.cmd("say hello!!!!!!")
 
     at = pymc.AtTickAfter(20 * 5) & pymc.ALWAYS | func_after_5_sec

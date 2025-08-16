@@ -1,7 +1,9 @@
 """java对象包装类"""
 
+from __future__ import annotations
+
 from abc import ABC
-from typing import Callable, overload, Any, TypeAlias, TypeVar, Self
+from typing import Callable, overload, Any, TypeAlias, TypeVar
 from collections.abc import Sequence
 from py4j.java_gateway import JavaObject, JavaGateway
 from py4j.java_collections import JavaList
@@ -25,7 +27,7 @@ class JavaClassFactory:
         """获取静态类实例"""
         return getattr(getattr(self.gateway.jvm, clazz), field)
 
-    def new_handled[T: JavaObjectHandler](
+    def new_handled[T: JavaObjectProxy](
         self, clazz: str, handle_class: type[T], *args: Any
     ) -> T:
         """根据类名实例化java类并使用handle_class处理"""
@@ -36,7 +38,7 @@ class JavaClassFactory:
         return self.new("net.minecraft.util.math.Vec3d", *(float(w) for w in v))
 
 
-class JavaObjectHandler(ABC):
+class JavaObjectProxy(ABC):
     """
     Java对象处理器基类
 
@@ -46,6 +48,7 @@ class JavaObjectHandler(ABC):
     obj: JavaObject
     gateway: JavaGateway
     class_factory: JavaClassFactory
+    mngr: PymcMngr
 
     def __init__(self, java_object: JavaObject, java_gateway: JavaGateway):
         """
@@ -57,11 +60,35 @@ class JavaObjectHandler(ABC):
         self.obj = java_object
         self.gateway = java_gateway
         self.class_factory = JavaClassFactory(java_gateway)
+        self.mngr = PymcMngr.from_gateway(java_gateway)
 
-    @classmethod
-    def default_handle(cls, java_object: JavaObject, java_gateway: JavaGateway) -> Self:
-        """返回默认实现"""
-        return cls(java_object, java_gateway)
+    def new[T: JavaObjectProxy](self, obj: JavaObject, cls: type[T]) -> T:
+        """
+        生成Java对象处理器
+
+        Args:
+            cls (type[T]): 要生成的Java对象处理器类
+            obj (JavaObject): 要包装的Java对象
+
+        Returns:
+            T: 生成的Java对象处理器
+        """
+        return cls(obj, self.gateway)
+
+    def new_list[T: JavaObjectProxy](
+        self, java_list: JavaList, cls: type[T]
+    ) -> JavaListProxy[T]:
+        """
+        生成Java对象列表处理器
+
+        Args:
+            cls (type[T]): 要生成的Java对象列表处理器类
+            java_list (JavaList): 要包装的Java对象列表
+
+        Returns:
+            T: 生成的Java对象列表处理器
+        """
+        return JavaListProxy(java_list, self.gateway, cls)
 
     def __bool__(self) -> bool:
         """判断Java对象是否存在"""
@@ -82,7 +109,7 @@ class JavaObjectHandler(ABC):
         return self.gateway.jvm.java.util.Objects.isNull(self.obj)  # type: ignore
 
 
-class JavaListHandler[T: JavaObjectHandler](Sequence[T]):
+class JavaListProxy[T: JavaObjectProxy](Sequence[T]):
     """
     Java列表包装类
     """
@@ -124,7 +151,7 @@ class JavaListHandler[T: JavaObjectHandler](Sequence[T]):
         if isinstance(index, slice):
             # 处理切片
             sliced_list = self._list[index]
-            return JavaListHandler(sliced_list, self._gateway, self._item_handler_type)
+            return JavaListProxy(sliced_list, self._gateway, self._item_handler_type)
         return self._item_handler_type(self._list[index], self._gateway)
 
     def __len__(self) -> int:
@@ -137,7 +164,114 @@ class JavaListHandler[T: JavaObjectHandler](Sequence[T]):
         return len(self._list)
 
 
-class JavaLogger(JavaObjectHandler):
+class PymcMngr(JavaObjectProxy):
+    """top.fish1000.pymcfabric.PymcMngr"""
+
+    @staticmethod
+    def from_gateway(gateway: JavaGateway) -> PymcMngr:
+        """从gateway中获取PymcMngr实例"""
+        return PymcMngr(gateway.entry_point, gateway)
+
+    @property
+    def mod_id(self) -> str:
+        """
+        获取模组ID
+
+        Returns:
+            str: 模组ID字符串
+        """
+        return self.obj.MOD_ID  # type: ignore
+
+    @property
+    def logger(self) -> JavaLogger:
+        """
+        获取Java端日志记录器实例
+
+        Returns:
+            JavaLogger: Java日志记录器包装对象
+        """
+        return self.new(
+            self.obj.LOGGER,  # type: ignore
+            JavaLogger,
+        )
+
+    @property
+    def server(self) -> Server:
+        """获取服务器对象"""
+
+        return self.new(
+            self.obj.server,  # type: ignore
+            Server,
+        )
+
+    @property
+    def executor(self) -> NamedAdvancedExecutor:
+        """获取执行器对象"""
+
+        return self.new(
+            self.obj.executor,  # type: ignore
+            NamedAdvancedExecutor,
+        )
+
+    def get_command_source(self, name: str) -> JavaObject:
+        """
+        获取命令源对象
+
+        Args:
+            name (str): 命令源名称
+
+        Returns:
+            命令源对象
+        """
+
+        return self.obj.getCommandSource(name)  # type: ignore
+
+    def send_command(self, command: str, name: str) -> None:
+        """
+        发送命令
+
+        Args:
+            command (str): 命令
+        """
+
+        self.obj.sendCommand(command, name)  # type: ignore
+
+    def get_entities(self, selector: str) -> JavaListProxy[Entity]:
+        """
+        获取实体对象
+
+        Args:
+            selector (str): 选择器
+
+        Returns:
+            实体对象
+        """
+
+        return self.new_list(
+            self.obj.getEntities(selector),  # type: ignore
+            Entity,
+        )
+
+    def get_entity(self, selector: str) -> Entity | None:
+        """
+        获取实体对象
+
+        Args:
+            selector (str): 选择器
+
+        Returns:
+            实体对象
+        """
+
+        entity: JavaObject = self.obj.getEntity(selector)  # type: ignore
+        return self.new(entity, Entity) if entity else None
+
+    def log(self, msg: str):
+        """PymcMngr.logger.info方法的别名"""
+        self.logger.info(msg)
+
+
+class JavaLogger(JavaObjectProxy):
     """
     Java日志记录器包装类
 
@@ -181,11 +315,11 @@ class JavaLogger(JavaObjectHandler):
         self.obj.error(message)  # type: ignore
 
 
-V = TypeVar("V", bound=JavaObjectHandler)
+V = TypeVar("V", bound=JavaObjectProxy)
 CallbackFunction: TypeAlias = Callable[[V, TypeDict], None]
 
 
-class Middleman[T: JavaObjectHandler]:
+class Middleman[T: JavaObjectProxy]:
     """
     中间人类，用于在Java和Python之间传递回调函数。
 
@@ -228,102 +362,7 @@ class Middleman[T: JavaObjectHandler]:
         implements = ["java.util.function.Consumer"]
 
 
-class PymcMngr(JavaObjectHandler):
-    """top.fish1000.pymcfabric.PymcMngr"""
-
-    @staticmethod
-    def from_gateway(gateway: JavaGateway):
-        return PymcMngr(gateway.entry_point, gateway)
-
-    @property
-    def logger(self) -> JavaLogger:
-        """
-        获取Java端日志记录器实例
-
-        Returns:
-            JavaLogger: Java日志记录器包装对象
-        """
-        return JavaLogger(
-            self.obj.LOGGER,  # type: ignore
-            self.gateway,
-        )
-
-    @property
-    def mod_id(self) -> str:
-        """
-        获取模组ID
-
-        Returns:
-            str: 模组ID字符串
-        """
-        return self.obj.MOD_ID  # type: ignore
-
-    def get_command_source(self, name: str) -> JavaObject:
-        """
-        获取命令源对象
-
-        Args:
-            name (str): 命令源名称
-
-        Returns:
-            命令源对象
-        """
-
-        return self.obj.getCommandSource(name)  # type: ignore
-
-    def send_command(self, command: str, name: str) -> None:
-        """
-        发送命令
-
-        Args:
-            command (str): 命令
-        """
-
-        self.obj.sendCommand(command, name)  # type: ignore
-
-    def get_entities(self, selector: str) -> JavaList:
-        """
-        获取实体对象
-
-        Args:
-            selector (str): 选择器
-
-        Returns:
-            实体对象
-        """
-
-        return self.obj.getEntities(selector)  # type: ignore
-
-    def get_entity(self, selector: str) -> JavaObject:
-        """
-        获取实体对象
-
-        Args:
-            selector (str): 选择器
-
-        Returns:
-            实体对象
-        """
-
-        return self.obj.getEntity(selector)  # type: ignore
-
-    @property
-    def server(self) -> "Server":
-        """获取服务器对象"""
-
-        return Server(
-            self.obj.server,  # type: ignore
-            self.gateway,
-        )
-
-    @property
-    def executor(self) -> "NamedAdvancedExecutor":
-        """获取执行器对象"""
-
-        return NamedAdvancedExecutor(self.obj.executor, self.gateway)  # type: ignore
-
-
-class NamedAdvancedExecutor(JavaObjectHandler):
+class NamedAdvancedExecutor(JavaObjectProxy):
     """
     Java高级命名执行器包装类
 
@@ -363,7 +402,7 @@ class NamedAdvancedExecutor(JavaObjectHandler):
         self.obj.pushOnce(callback, name)  # type: ignore
 
 
-class Entity(JavaObjectHandler):
+class Entity(JavaObjectProxy):
     """对应net.minecraft.entity.Entity"""
 
     @property
@@ -385,21 +424,13 @@ class Entity(JavaObjectHandler):
         self.obj.move(movement_type, movement_obj)  # type: ignore
 
 
-class Server(JavaObjectHandler):
+class Server(JavaObjectProxy):
     """
     面向用户的Minecraft服务器对象包装类
     net.minecraft.server.MinecraftServer
 
     提供对Minecraft服务器实例的访问接口，包括命令执行和日志记录功能
     """
-
-    logger: JavaLogger
-    mngr: PymcMngr
-
-    def __init__(self, server: JavaObject, java_gateway: JavaGateway) -> None:
-        super().__init__(server, java_gateway)
-        self.mngr = PymcMngr.from_gateway(java_gateway)
-        self.logger = self.mngr.logger
 
     def cmd(self, command: str, name: str = "PYMC"):
         """
@@ -411,25 +442,14 @@ class Server(JavaObjectHandler):
         source = self.mngr.get_command_source(name)
         self.obj.getCommandManager().executeWithPrefix(source, command)  # type: ignore
 
-    def log(self, msg: str):
-        """
-        记录信息日志
-
-        等效于 server.logger.info
-
-        Args:
-            msg (str): 日志消息
-        """
-        self.logger.info(msg)
-
-    def get_entities(self, selector: str = "@e") -> JavaListHandler[Entity]:
+    def get_entities(self, selector: str = "@e") -> JavaListProxy[Entity]:
         """
         获取指定实体
 
         Args:
             selector (str): 命令方块中的实体选择器
         """
-        return JavaListHandler(self.mngr.get_entities(selector), self.gateway, Entity)
+        return self.mngr.get_entities(selector)
 
     def get_entity(self, selector: str = "@e") -> Entity | None:
         """
@@ -441,5 +461,4 @@ class Server(JavaObjectHandler):
         Returns:
             Entity | None: 返回选中的实体，如果没有，则返回None
         """
-        entity = self.mngr.get_entity(selector)
-        return Entity(entity, self.gateway) if entity else None
+        return self.mngr.get_entity(selector)
