@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from abc import ABC
 from typing import Callable, overload, Any, TypeAlias, TypeVar
 from collections.abc import Sequence
 from py4j.java_gateway import JavaObject, JavaGateway, get_field
@@ -11,42 +10,15 @@ from py4j.java_collections import JavaList
 from .type_dict import TypeDict
 
 
-class JavaClassFactory:
-    """提供java类实例化方法"""
-
-    gateway: JavaGateway
-
-    def __init__(self, gateway: JavaGateway) -> None:
-        self.gateway = gateway
-
-    def new(self, clazz: str, *args: Any) -> JavaObject:
-        """根据类名实例化java类"""
-        return getattr(self.gateway.jvm, clazz)(*args)  # type: ignore
-
-    def get_static(self, clazz: str, field: str) -> JavaObject:
-        """获取静态类实例"""
-        return getattr(getattr(self.gateway.jvm, clazz), field)
-
-    def new_handled[T: JavaObjectProxy](
-        self, clazz: str, handle_class: type[T], *args: Any
-    ) -> T:
-        """根据类名实例化java类并使用handle_class处理"""
-        return handle_class(self.new(clazz, *args), self.gateway)
-
-    def v3d(self, v: tuple[float, float, float]) -> JavaObject:
-        """创建Vec3d对象 net.minecraft.util.math.Vec3d"""
-        return self.new("net.minecraft.util.math.Vec3d", *(float(w) for w in v))
-
-
-class JavaObjectProxy(ABC):
+class JavaObjectProxy:
     """
     Java对象代理基类
 
     用于包装Java对象，提供统一的访问接口
     """
 
-    obj: JavaObject
-    gateway: JavaGateway
+    _obj: JavaObject
+    _gateway: JavaGateway
 
     def __init__(self, java_object: JavaObject, java_gateway: JavaGateway):
         """
@@ -55,9 +27,8 @@ class JavaObjectProxy(ABC):
         Args:
             java_object (JavaObject): 要包装的Java对象
         """
-        self.obj = java_object
-        self.gateway = java_gateway
-        self.class_factory = JavaClassFactory(java_gateway)
+        self._obj = java_object
+        self._gateway = java_gateway
 
     @property
     def mngr(self) -> PymcMngr:
@@ -65,7 +36,25 @@ class JavaObjectProxy(ABC):
         if isinstance(self, PymcMngr):
             return self
 
-        return PymcMngr.from_gateway(self.gateway)
+        return PymcMngr.from_gateway(self._gateway)
+
+    @property
+    def class_factory(self) -> JavaClassFactory:
+        """获取JavaGateway实例"""
+        if isinstance(self, JavaClassFactory):
+            return self
+
+        return JavaClassFactory(self._obj, self._gateway)
+
+    @property
+    def obj(self) -> JavaObject:
+        """获取Java对象"""
+        return self._obj
+
+    @property
+    def gateway(self) -> JavaGateway:
+        """获取Java对象对应的JavaGateway"""
+        return self._gateway
 
     def proxy[T](self, obj: Any, cls: type[T]) -> T:
         """
@@ -84,11 +73,11 @@ class JavaObjectProxy(ABC):
         if not issubclass(cls, JavaObjectProxy):
             raise TypeError(f"{cls} is not a JavaObjectProxy and {obj} is not a {cls}")
 
-        return cls(obj, self.gateway)  # 元素是 JavaObject ，使用cls包装
+        return cls(obj, self._gateway)  # 元素是 JavaObject ，使用cls包装
 
     def proxy_list[T](self, obj: Any, cls: type[T]) -> JavaListProxy[T]:
         """列表代理"""
-        return JavaListProxy(obj, self.gateway, cls)
+        return JavaListProxy(obj, self._gateway, cls)
 
     @overload
     def call[T](self, path: str, cls: type[T], *args: Any) -> T: ...
@@ -108,7 +97,7 @@ class JavaObjectProxy(ABC):
             返回值
         """
 
-        func: Callable = getattr(self.obj, path)
+        func: Callable = getattr(self._obj, path)
         if not callable(func):
             raise TypeError(f"{path} is not a function")
 
@@ -147,7 +136,7 @@ class JavaObjectProxy(ABC):
         Returns:
             T: 生成的Java对象代理
         """
-        return self.proxy(get_field(self.obj, path), cls)
+        return self.proxy(get_field(self._obj, path), cls)
 
     def get_list[T](self, path: str, cls: type[T]) -> JavaListProxy[T]:
         """从Java对象中获取指定路径的列表
@@ -159,7 +148,7 @@ class JavaObjectProxy(ABC):
         Returns:
             JavaListProxy[T]: 生成的Java列表代理
         """
-        return self.proxy_list(get_field(self.obj, path), cls)
+        return self.proxy_list(get_field(self._obj, path), cls)
 
     def new_list[T](self, java_list: JavaList, cls: type[T]) -> JavaListProxy[T]:
         """
@@ -172,25 +161,21 @@ class JavaObjectProxy(ABC):
         Returns:
             T: 生成的Java对象列表代理
         """
-        return JavaListProxy(java_list, self.gateway, cls)
+        return JavaListProxy(java_list, self._gateway, cls)
 
     def __bool__(self) -> bool:
         """判断Java对象是否存在"""
         return not self.is_null()
 
-    def get_object(self) -> JavaObject:
-        """获取Java对象"""
-        return self.obj
-
     def __str__(self) -> str:
         """将Java对象转换为字符串"""
-        return str(self.obj)
+        return str(self._obj)
 
     def is_null(self) -> bool:
         """检查对象是否为null"""
-        if self.obj is None:
+        if self._obj is None:
             return True
-        return self.gateway.jvm.java.util.Objects.isNull(self.obj)  # type: ignore
+        return self._gateway.jvm.java.util.Objects.isNull(self._obj)  # type: ignore
 
 
 class JavaListProxy[T](JavaObjectProxy, Sequence[T]):
@@ -237,9 +222,9 @@ class JavaListProxy[T](JavaObjectProxy, Sequence[T]):
         if isinstance(index, slice):
             # 处理切片
             sliced_list = self._list[index]
-            return JavaListProxy(sliced_list, self.gateway, self._item_handler_type)
+            return JavaListProxy(sliced_list, self._gateway, self._item_handler_type)
         return (
-            self._item_handler_type(self._list[index], self.gateway)
+            self._item_handler_type(self._list[index], self._gateway)
             if issubclass(self._item_handler_type, JavaObjectProxy)
             else self._list[index]
         )
@@ -252,6 +237,28 @@ class JavaListProxy[T](JavaObjectProxy, Sequence[T]):
             int: 列表元素数量
         """
         return len(self._list)
+
+
+class JavaClassFactory(JavaObjectProxy):
+    """提供java类实例化方法 此类内的路径为绝对路径"""
+
+    def new(self, clazz: str, *args: Any) -> JavaObject:
+        """根据类名实例化java类"""
+        return getattr(self._gateway.jvm, clazz)(*args)  # type: ignore
+
+    def get_static(self, clazz: str, field: str) -> JavaObject:
+        """获取静态类实例"""
+        return getattr(getattr(self._gateway.jvm, clazz), field)
+
+    def new_handled[T: JavaObjectProxy](
+        self, clazz: str, handle_class: type[T], *args: Any
+    ) -> T:
+        """根据类名实例化java类并使用handle_class处理"""
+        return handle_class(self.new(clazz, *args), self._gateway)
+
+    def v3d(self, v: tuple[float, float, float]) -> JavaObject:
+        """创建Vec3d对象 net.minecraft.util.math.Vec3d"""
+        return self.new("net.minecraft.util.math.Vec3d", *(float(w) for w in v))
 
 
 class PymcMngr(JavaObjectProxy):
@@ -509,6 +516,10 @@ class Server(JavaObjectProxy):
         self.call("getCommandManager", JavaObjectProxy).call(
             "executeWithPrefix", None, source, command
         )
+
+    def say(self, message: str, name: str = "PYMC"):
+        """Server.cmd("say <message>")"""
+        self.cmd(f"say {message}", name)
 
     def get_entities(self, selector: str = "@e") -> JavaListProxy[Entity]:
         """
