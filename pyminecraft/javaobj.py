@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC
 from typing import Callable, overload, Any, TypeAlias, TypeVar
 from collections.abc import Sequence
-from py4j.java_gateway import JavaObject, JavaGateway
+from py4j.java_gateway import JavaObject, JavaGateway, get_field
 from py4j.java_collections import JavaList
 
 from .type_dict import TypeDict
@@ -40,19 +40,17 @@ class JavaClassFactory:
 
 class JavaObjectProxy(ABC):
     """
-    Java对象处理器基类
+    Java对象代理基类
 
     用于包装Java对象，提供统一的访问接口
     """
 
     obj: JavaObject
     gateway: JavaGateway
-    class_factory: JavaClassFactory
-    mngr: PymcMngr
 
     def __init__(self, java_object: JavaObject, java_gateway: JavaGateway):
         """
-        初始化Java对象处理器
+        初始化Java对象代理
 
         Args:
             java_object (JavaObject): 要包装的Java对象
@@ -60,45 +58,131 @@ class JavaObjectProxy(ABC):
         self.obj = java_object
         self.gateway = java_gateway
         self.class_factory = JavaClassFactory(java_gateway)
-        self.mngr = PymcMngr.from_gateway(java_gateway)
 
-    def new[T: JavaObjectProxy](self, obj: JavaObject, cls: type[T]) -> T:
+    @property
+    def mngr(self) -> PymcMngr:
+        """获取pymc管理器"""
+        if isinstance(self, PymcMngr):
+            return self
+
+        return PymcMngr.from_gateway(self.gateway)
+
+    def proxy[T](self, obj: Any, cls: type[T]) -> T:
         """
-        生成Java对象处理器
+        获取代理对象
 
         Args:
-            cls (type[T]): 要生成的Java对象处理器类
-            obj (JavaObject): 要包装的Java对象
+            obj: Java对象
+            cls: 代理对象类型
 
         Returns:
-            T: 生成的Java对象处理器
+            代理对象
         """
-        return cls(obj, self.gateway)
+        if isinstance(obj, cls):
+            return obj
 
-    def new_list[T: JavaObjectProxy](
-        self, java_list: JavaList, cls: type[T]
-    ) -> JavaListProxy[T]:
+        if not issubclass(cls, JavaObjectProxy):
+            raise TypeError(f"{cls} is not a JavaObjectProxy and {obj} is not a {cls}")
+
+        return cls(obj, self.gateway)  # 元素是 JavaObject ，使用cls包装
+
+    def proxy_list[T](self, obj: Any, cls: type[T]) -> JavaListProxy[T]:
+        """列表代理"""
+        return JavaListProxy(obj, self.gateway, cls)
+
+    @overload
+    def call[T](self, path: str, cls: type[T], *args: Any) -> T: ...
+    @overload
+    def call(self, path: str, cls: None, *args: Any) -> None: ...
+
+    def call[T](self, path: str, cls: type[T] | None, *args: Any) -> T | None:
         """
-        生成Java对象列表处理器
+        调用指定路径的方法
 
         Args:
-            cls (type[T]): 要生成的Java对象列表处理器类
+            path: 方法路径
+            cls: 返回值类型
+            *args: 方法参数
+
+        Returns:
+            返回值
+        """
+
+        func: Callable = getattr(self.obj, path)
+        if not callable(func):
+            raise TypeError(f"{path} is not a function")
+
+        obj: Any = func(*args)
+
+        if obj is None and cls is None:
+            return None
+
+        if cls is None or obj is None:
+            raise TypeError(f"{path} not return type {cls} but {type(obj)}")
+
+        return self.proxy(obj, cls)
+
+    def call_list[T](self, path: str, cls: type[T], *args: Any) -> JavaListProxy[T]:
+        """
+        调用指定路径的方法（返回列表）
+
+        Args:
+            path: 方法路径
+            cls: 返回值类型
+            *args: 方法参数
+
+        Returns:
+            列表返回值
+        """
+        return self.new_list(self.call(path, JavaList, *args), cls)
+
+    def get[T](self, path: str, cls: type[T]) -> T:
+        """
+        从Java对象中获取指定路径的值
+
+        Args:
+            cls (type[T]): 如果是java对象代理类，就返回对应的Java对象代理；否则判断并直接返回值
+            path (str): 要获取的值
+
+        Returns:
+            T: 生成的Java对象代理
+        """
+        return self.proxy(get_field(self.obj, path), cls)
+
+    def get_list[T](self, path: str, cls: type[T]) -> JavaListProxy[T]:
+        """从Java对象中获取指定路径的列表
+
+        Args:
+            cls (type[T]): 列表中元素的类型
+            path (str): 要获取的列表
+
+        Returns:
+            JavaListProxy[T]: 生成的Java列表代理
+        """
+        return self.proxy_list(get_field(self.obj, path), cls)
+
+    def new_list[T](self, java_list: JavaList, cls: type[T]) -> JavaListProxy[T]:
+        """
+        生成Java对象列表代理
+
+        Args:
+            cls (type[T]): 要生成的Java对象列表代理类
             java_list (JavaList): 要包装的Java对象列表
 
         Returns:
-            T: 生成的Java对象列表处理器
+            T: 生成的Java对象列表代理
         """
         return JavaListProxy(java_list, self.gateway, cls)
 
     def __bool__(self) -> bool:
         """判断Java对象是否存在"""
-        return not self.is_null() and self.obj is not None
+        return not self.is_null()
 
     def get_object(self) -> JavaObject:
         """获取Java对象"""
         return self.obj
 
-    def to_string(self) -> str:
+    def __str__(self) -> str:
         """将Java对象转换为字符串"""
         return str(self.obj)
 
@@ -109,28 +193,30 @@ class JavaObjectProxy(ABC):
         return self.gateway.jvm.java.util.Objects.isNull(self.obj)  # type: ignore
 
 
-class JavaListProxy[T: JavaObjectProxy](Sequence[T]):
+class JavaListProxy[T](JavaObjectProxy, Sequence[T]):
     """
     Java列表包装类
     """
 
     _list: JavaList
     _item_handler_type: type[T]
-    _gateway: JavaGateway
 
     def __init__(
-        self, java_list: JavaList, java_gateway: JavaGateway, item_handler_type: type[T]
+        self,
+        java_list: JavaList,
+        java_gateway: JavaGateway,
+        item_handler_type: type[T],
     ):
         """
-        初始化Java列表处理器
+        初始化Java列表代理
 
         Args:
             java_list (JavaList): 要包装的Java列表
-            item_handler_type (type[T]): 列表项处理器的类型
+            item_handler_type (type[T]): 列表项代理的类型
         """
+        super().__init__(java_list, java_gateway)
         self._list = java_list
         self._item_handler_type = item_handler_type
-        self._gateway = java_gateway
 
     @overload
     def __getitem__(self, index: int) -> T: ...
@@ -151,8 +237,12 @@ class JavaListProxy[T: JavaObjectProxy](Sequence[T]):
         if isinstance(index, slice):
             # 处理切片
             sliced_list = self._list[index]
-            return JavaListProxy(sliced_list, self._gateway, self._item_handler_type)
-        return self._item_handler_type(self._list[index], self._gateway)
+            return JavaListProxy(sliced_list, self.gateway, self._item_handler_type)
+        return (
+            self._item_handler_type(self._list[index], self.gateway)
+            if issubclass(self._item_handler_type, JavaObjectProxy)
+            else self._list[index]
+        )
 
     def __len__(self) -> int:
         """
@@ -180,7 +270,7 @@ class PymcMngr(JavaObjectProxy):
         Returns:
             str: 模组ID字符串
         """
-        return self.obj.MOD_ID  # type: ignore
+        return self.get("MOD_ID", str)
 
     @property
     def logger(self) -> JavaLogger:
@@ -190,28 +280,19 @@ class PymcMngr(JavaObjectProxy):
         Returns:
             JavaLogger: Java日志记录器包装对象
         """
-        return self.new(
-            self.obj.LOGGER,  # type: ignore
-            JavaLogger,
-        )
+        return self.get("LOGGER", JavaLogger)
 
     @property
     def server(self) -> Server:
         """获取服务器对象"""
 
-        return self.new(
-            self.obj.server,  # type: ignore
-            Server,
-        )
+        return self.get("server", Server)
 
     @property
     def executor(self) -> NamedAdvancedExecutor:
         """获取执行器对象"""
 
-        return self.new(
-            self.obj.executor,  # type: ignore
-            NamedAdvancedExecutor,
-        )
+        return self.get("executor", NamedAdvancedExecutor)
 
     def get_command_source(self, name: str) -> JavaObject:
         """
@@ -224,7 +305,7 @@ class PymcMngr(JavaObjectProxy):
             命令源对象
         """
 
-        return self.obj.getCommandSource(name)  # type: ignore
+        return self.call("getCommandSource", JavaObject, name)
 
     def send_command(self, command: str, name: str) -> None:
         """
@@ -234,7 +315,7 @@ class PymcMngr(JavaObjectProxy):
             command (str): 命令
         """
 
-        self.obj.sendCommand(command, name)  # type: ignore
+        self.call("sendCommand", None, command, name)
 
     def get_entities(self, selector: str) -> JavaListProxy[Entity]:
         """
@@ -247,24 +328,7 @@ class PymcMngr(JavaObjectProxy):
             实体对象
         """
 
-        return self.new_list(
-            self.obj.getEntities(selector),  # type: ignore
-            Entity,
-        )
-
-    def get_entity(self, selector: str) -> Entity | None:
-        """
-        获取实体对象
-
-        Args:
-            selector (str): 选择器
-
-        Returns:
-            实体对象
-        """
-
-        entity: JavaObject = self.obj.getEntity(selector)  # type: ignore
-        return self.new(entity, Entity) if entity else None
+        return self.call_list("getEntities", Entity, selector)
 
     def log(self, msg: str):
         """PymcMngr.logger.info方法的别名"""
@@ -285,7 +349,7 @@ class JavaLogger(JavaObjectProxy):
         Args:
             message (str): 日志消息
         """
-        self.obj.debug(message)  # type: ignore
+        self.call("debug", None, message)
 
     def info(self, message: str) -> None:
         """
@@ -294,7 +358,7 @@ class JavaLogger(JavaObjectProxy):
         Args:
             message (str): 日志消息
         """
-        self.obj.info(message)  # type: ignore
+        self.call("info", None, message)
 
     def warn(self, message: str) -> None:
         """
@@ -303,7 +367,7 @@ class JavaLogger(JavaObjectProxy):
         Args:
             message (str): 日志消息
         """
-        self.obj.warn(message)  # type: ignore
+        self.call("warn", None, message)
 
     def error(self, message: str) -> None:
         """
@@ -312,7 +376,7 @@ class JavaLogger(JavaObjectProxy):
         Args:
             message (str): 日志消息
         """
-        self.obj.error(message)  # type: ignore
+        self.call("error", None, message)
 
 
 V = TypeVar("V", bound=JavaObjectProxy)
@@ -379,7 +443,7 @@ class NamedAdvancedExecutor(JavaObjectProxy):
             callback (Middleman): 回调函数
             name (str): 任务名称
         """
-        self.obj.pushScheduled(tick, callback, name)  # type: ignore
+        self.call("pushScheduled", None, tick, callback, name)
 
     def push_continuous(self, callback: Middleman, name: str) -> None:
         """
@@ -389,7 +453,7 @@ class NamedAdvancedExecutor(JavaObjectProxy):
             callback (JavaConsumer): 回调函数
             name (str): 任务名称
         """
-        self.obj.pushContinuous(callback, name)  # type: ignore
+        self.call("pushContinuous", None, callback, name)
 
     def push_once(self, callback: Middleman, name: str) -> None:
         """
@@ -399,7 +463,7 @@ class NamedAdvancedExecutor(JavaObjectProxy):
             callback (JavaConsumer): 回调函数
             name (str): 任务名称
         """
-        self.obj.pushOnce(callback, name)  # type: ignore
+        self.call("pushOnce", None, callback, name)
 
 
 class Entity(JavaObjectProxy):
@@ -408,20 +472,21 @@ class Entity(JavaObjectProxy):
     @property
     def name(self) -> str:
         """获取实体名称"""
-        return self.obj.getName().getString()  # type: ignore
+        # return self.obj.getName().getString()  # type: ignore
+        return self.call("getName", JavaObjectProxy).call("getString", str)
 
     @property
     def uuid(self) -> str:
         """获取实体UUID"""
-        return self.obj.getUuidAsString()  # type: ignore
+        # return self.obj.getUuidAsString()  # type: ignore
+        return self.call("getUuidAsString", str)
 
     def move(self, movement: tuple[float, float, float]):
-        """net.minecraft.entity.Entity.move"""
-        movement_type = self.class_factory.get_static(
-            "net.minecraft.entity.MovementType", "SELF"
-        )
-        movement_obj = self.class_factory.v3d(movement)
-        self.obj.move(movement_type, movement_obj)  # type: ignore
+        """移动一个实体"""
+        x = float(movement[0] + self.call("getX", float))
+        y = float(movement[1] + self.call("getY", float))
+        z = float(movement[2] + self.call("getZ", float))
+        self.call("setPosition", None, x, y, z)
 
 
 class Server(JavaObjectProxy):
@@ -440,7 +505,10 @@ class Server(JavaObjectProxy):
             str (str): 要执行的命令字符串
         """
         source = self.mngr.get_command_source(name)
-        self.obj.getCommandManager().executeWithPrefix(source, command)  # type: ignore
+        # self.obj.getCommandManager().executeWithPrefix(source, command)  # type: ignore
+        self.call("getCommandManager", JavaObjectProxy).call(
+            "executeWithPrefix", None, source, command
+        )
 
     def get_entities(self, selector: str = "@e") -> JavaListProxy[Entity]:
         """
@@ -450,15 +518,3 @@ class Server(JavaObjectProxy):
             selector (str): 命令方块中的实体选择器
         """
         return self.mngr.get_entities(selector)
-
-    def get_entity(self, selector: str = "@e") -> Entity | None:
-        """
-        获取指定实体（只返回第一个）
-
-        Args:
-            selector (str, optional): 命令方块中的实体选择器. Defaults to "@e".
-
-        Returns:
-            Entity | None: 返回选中的实体，如果没有，则返回None
-        """
-        return self.mngr.get_entity(selector)

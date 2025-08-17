@@ -72,39 +72,6 @@ public class PymcMngr {
         var entities = getEntities(selector);
         if (!entities.isEmpty())
             return getEntities(selector).getFirst();
-        return (Entity) null;
-    }
-
-    // public static void move(MovementType type, Vec3d movement, Entity entity) {
-    // double d = movement.x;
-    // double e = movement.z;
-    // double o = movement.y;
-    // double p = d * d + o * o + e * e;
-    // if (p < 2.500000277905201E-7) {
-    // entity.setForwardSpeed(0.0F);
-    // return;
-    // }
-
-    // n = (float) (MathHelper.atan2(e, d) * 57.2957763671875) - 90.0F;
-    // this.entity.setYaw(this.wrapDegrees(this.entity.getYaw(), n, 90.0F));
-    // this.entity.setMovementSpeed(
-    // (float) (this.speed *
-    // this.entity.getAttributeValue(EntityAttributes.GENERIC_MOVEMENT_SPEED)));
-    // BlockPos blockPos = this.entity.getBlockPos();
-    // BlockState blockState = this.entity.getWorld().getBlockState(blockPos);
-    // VoxelShape voxelShape = blockState.getCollisionShape(this.entity.getWorld(),
-    // blockPos);
-    // if (o > (double) this.entity.getStepHeight() && d * d + e * e < (double)
-    // Math.max(1.0F, this.entity.getWidth())
-    // || !voxelShape.isEmpty() && this.entity.getY() < voxelShape.getMax(Axis.Y) +
-    // (double) blockPos.getY()
-    // && !blockState.isIn(BlockTags.DOORS) && !blockState.isIn(BlockTags.FENCES)) {
-    // this.entity.getJumpControl().setActive();
-    // this.state = net.minecraft.entity.ai.control.MoveControl.State.JUMPING;
-    // }
-    // }
-
-    public static void move(Entity entity) {
-        entity.move(MovementType.SELF, new Vec3d(1, 1, 1));
+        return null;
     }
 }
