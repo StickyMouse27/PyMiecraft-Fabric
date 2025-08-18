@@ -9,22 +9,19 @@ import org.slf4j.LoggerFactory;
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 
-import net.minecraft.block.BlockState;
 import net.minecraft.command.EntitySelector;
 import net.minecraft.command.EntitySelectorReader;
 import net.minecraft.entity.Entity;
-import net.minecraft.entity.MovementType;
-import net.minecraft.entity.attribute.EntityAttributes;
-import net.minecraft.registry.tag.BlockTags;
+import net.minecraft.entity.EntityType;
+import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Vec2f;
 import net.minecraft.util.math.Vec3d;
-import net.minecraft.util.shape.VoxelShape;
+import net.minecraft.world.World;
 import py4j.GatewayServer;
 import top.fish1000.pymcfabric.executor.NamedAdvancedExecutor;
 
@@ -68,10 +65,15 @@ public class PymcMngr {
         }
     }
 
-    public static @Nullable Entity getEntity(String selector) {
-        var entities = getEntities(selector);
-        if (!entities.isEmpty())
-            return getEntities(selector).getFirst();
-        return null;
+    public static Entity loadEntity(String id, World world, @Nullable NbtCompound nbt,
+            float x, float y, float z, float yaw, float pitch) {
+        if (nbt == null)
+            nbt = new NbtCompound();
+
+        nbt.putString("id", Identifier.tryParse(id).toString());
+        return EntityType.loadEntityWithPassengers(nbt, world, (entity) -> {
+            entity.refreshPositionAndAngles(x, y, z, yaw, pitch);
+            return entity;
+        });
     }
 }

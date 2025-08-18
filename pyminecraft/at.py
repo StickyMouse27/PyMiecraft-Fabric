@@ -1,6 +1,6 @@
 """提供装饰器，将回调函数信息传递至java端"""
 
-from typing import Callable, Self
+from typing import Callable, Self, Literal, TypeAlias
 from functools import wraps
 from abc import ABC
 from enum import Enum
@@ -14,10 +14,11 @@ from .javaobj import (
     Middleman,
     Entity,
     Server,
+    PymcMngr,
     CallbackFunction,
 )
 from .type_dict import TypeDict
-from .connection import get_mngr, get_gateway
+from .connection import get_gateway
 
 
 class DecoratorBase[T: JavaObjectProxy](ABC):
@@ -43,7 +44,7 @@ class DecoratorBase[T: JavaObjectProxy](ABC):
         self.func = func
 
         self.wrapped = self._get_wrapper()
-        self.modify_when_def()
+        self._modify_when_def()
 
         return self.wrapped
 
@@ -57,34 +58,35 @@ class DecoratorBase[T: JavaObjectProxy](ABC):
 
         @wraps(self.func)
         def wrapper(obj: T, data: TypeDict) -> None:
-            if not self.modify_before_run(obj):
+            if self._modify_before_run(obj):
                 self.func(obj, data)
-                self.modify_after_run()
+                self._modify_after_run()
 
         return wrapper
 
-    def modify_when_def(self) -> None:
+    def _modify_when_def(self) -> None:
         """
         在装饰器定义时执行的修改操作。
 
         可以被子类重写以实现特定逻辑。
         """
 
-    def modify_after_run(self) -> None:
+    def _modify_after_run(self) -> None:
         """
         在函数运行时执行的修改操作。
 
         可以被子类重写以实现特定逻辑。
         """
 
-    def modify_before_run(self, obj: T) -> None | bool:
+    def _modify_before_run(self, _obj: T) -> bool:
         """
         在函数运行之前执行的修改操作。
 
         可以被子类重写以实现特定逻辑。
 
-        返回True则不执行函数，返回False或者None则执行函数。
+        返回True则执行函数，返回False则执行函数。
         """
+        return True
 
 
 class AtFlag:
@@ -104,7 +106,6 @@ class AtFlag:
 
         @wraps(value)
         def wrapper(func: CallbackFunction) -> T:
-            value(func)
             return value(func) & self
 
         return wrapper
@@ -215,7 +216,7 @@ class AbstractAt[T: JavaObjectProxy](DecoratorBase[T]):
 
         self.data[type(self)] = self
 
-        self.executor = get_mngr().executor
+        self.executor = PymcMngr.from_gateway(get_gateway()).executor
 
         self.arg_type = arg_type
 
@@ -276,7 +277,7 @@ class At[T: JavaObjectProxy](AbstractAt[T]):
     At装饰器，用于在特定位置执行函数。
     """
 
-    def modify_when_def(self) -> None:
+    def _modify_when_def(self) -> None:
         match flag := self.data.get(RunningFlag):
             case None:
                 pass
@@ -327,7 +328,7 @@ class After[T: JavaObjectProxy](AbstractAt[T]):
         super().__init__(at, *flags, arg_type=arg_type)
         self.after = after
 
-    def modify_when_def(self) -> None:
+    def _modify_when_def(self) -> None:
         match flag := self.data.get(RunningFlag):
             case None:
                 pass
@@ -342,7 +343,7 @@ class After[T: JavaObjectProxy](AbstractAt[T]):
             case _:
                 raise ValueError(f"Should never reached! Invalid runing flag: {flag}")
 
-    def modify_after_run(self) -> None:
+    def _modify_after_run(self) -> None:
         if flag := self.data.get(MaxTimesFlag):
             flag.step(self.cancel)
         if self.data[RunningFlag] == RunningFlag.ALWAYS:
@@ -378,23 +379,32 @@ class AtEntityInteract(At[Entity]):
     用于在特定实体被交互时执行任务
     """
 
-    entity: str
-    match_name: bool
+    Matches: TypeAlias = Literal["name", "uuid"]
+    CheckFunc: TypeAlias = Callable[[Entity, str], bool]
+    _entity: str | Entity
+    _match: Matches | CheckFunc
 
     def __init__(
         self,
-        entity: str,
+        entity: str | Entity,
         *flags: RunningFlag,
-        match_name: bool = False,
+        match: Matches | CheckFunc = "name",
     ) -> None:
         super().__init__("entity interact", *flags, arg_type=Entity)
 
-        self.entity = entity
-        self.match_name = match_name
+        self._entity = entity
+        self.match = match
 
-    def modify_before_run(self, obj: Entity) -> None | bool:
-        if self.match_name:
-            if obj.name == self.entity:
-                return False
+    def _modify_before_run(self, obj: Entity) -> bool:
+        if isinstance(self._entity, Entity):
+            return self._entity.uuid == obj.uuid
 
-        return True
+        if callable(self.match):
+            return self.match(obj, self._entity)
+
+        if self.match == "name":
+            return obj.name == self._entity
+        if self.match == "uuid":
+            return obj.uuid == self._entity
+
+        return False

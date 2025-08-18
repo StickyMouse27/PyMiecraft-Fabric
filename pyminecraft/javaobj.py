@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Callable, overload, Any, TypeAlias, TypeVar
+from typing import Callable, overload, Any, TypeAlias, TypeVar, Literal, Iterable, Self
 from collections.abc import Sequence
+
 from py4j.java_gateway import JavaObject, JavaGateway, get_field
 from py4j.java_collections import JavaList
 
@@ -56,7 +57,14 @@ class JavaObjectProxy:
         """获取Java对象对应的JavaGateway"""
         return self._gateway
 
-    def proxy[T](self, obj: Any, cls: type[T]) -> T:
+    @overload
+    def proxy(self, obj: JavaObject) -> JavaObjectProxy: ...
+
+    @overload
+    def proxy[T](self, obj: Any, cls: type[T]) -> T: ...
+    @overload
+    def proxy[T](self, obj: Any, cls: type[T] | None) -> T | JavaObjectProxy: ...
+    def proxy[T](self, obj: Any, cls: type[T] | None = None) -> T | JavaObjectProxy:
         """
         获取代理对象
 
@@ -67,6 +75,9 @@ class JavaObjectProxy:
         Returns:
             代理对象
         """
+        if cls is None:
+            return JavaObjectProxy(obj, self._gateway)
+
         if isinstance(obj, cls):
             return obj
 
@@ -80,11 +91,19 @@ class JavaObjectProxy:
         return JavaListProxy(obj, self._gateway, cls)
 
     @overload
-    def call[T](self, path: str, cls: type[T], *args: Any) -> T: ...
+    def call[T](self, path: str, args: Iterable[Any], ret: type[T]) -> T: ...
     @overload
-    def call(self, path: str, cls: None, *args: Any) -> None: ...
+    def call(self, path: str, args: Iterable[Any], ret: None) -> None: ...
 
-    def call[T](self, path: str, cls: type[T] | None, *args: Any) -> T | None:
+    @overload
+    def call(self, path: str, args: Iterable[Any] = ()) -> JavaObjectProxy: ...
+
+    def call[T](
+        self,
+        path: str,
+        args: Iterable[Any] = (),
+        ret: type[T] | None | Literal["JavaObjectProxy"] = "JavaObjectProxy",
+    ) -> T | JavaObjectProxy | None:
         """
         调用指定路径的方法
 
@@ -101,17 +120,30 @@ class JavaObjectProxy:
         if not callable(func):
             raise TypeError(f"{path} is not a function")
 
-        obj: Any = func(*args)
+        obj: Any = func(
+            *(arg.obj if isinstance(arg, JavaObjectProxy) else arg for arg in args)
+        )  # 如果是包装后的，则使用本身
 
-        if obj is None and cls is None:
+        if obj is None and ret is None:
             return None
 
-        if cls is None or obj is None:
-            raise TypeError(f"{path} not return type {cls} but {type(obj)}")
+        if ret is None or obj is None:
+            raise TypeError(f"{path} not return type {ret} but {type(obj)}")
 
-        return self.proxy(obj, cls)
+        return self.proxy(obj, JavaObjectProxy if ret == "JavaObjectProxy" else ret)
 
-    def call_list[T](self, path: str, cls: type[T], *args: Any) -> JavaListProxy[T]:
+    @overload
+    def call_list[T](
+        self, path: str, args: Iterable[Any], ret: type[T]
+    ) -> JavaListProxy[T]: ...
+
+    @overload
+    def call_list(
+        self, path: str, args: Iterable[Any] = ()
+    ) -> JavaListProxy[JavaObjectProxy]: ...
+    def call_list[T](
+        self, path: str, args: Iterable[Any] = (), ret: type[T] | None = None
+    ) -> JavaListProxy[T] | JavaListProxy[JavaObjectProxy]:
         """
         调用指定路径的方法（返回列表）
 
@@ -123,9 +155,20 @@ class JavaObjectProxy:
         Returns:
             列表返回值
         """
-        return self.new_list(self.call(path, JavaList, *args), cls)
+        if ret is None:
+            return self.new_list(self.call(path, args, JavaList))
+        return self.new_list(self.call(path, args, JavaList), ret)
 
-    def get[T](self, path: str, cls: type[T]) -> T:
+    @overload
+    def get(self, path: str) -> JavaObjectProxy: ...
+
+    @overload
+    def get[T](self, path: str, cls: type[T]) -> T: ...
+
+    @overload
+    def get[T](self, path: str, cls: type[T] | None = None) -> T | JavaObjectProxy: ...
+
+    def get[T](self, path: str, cls: type[T] | None = None) -> T | JavaObjectProxy:
         """
         从Java对象中获取指定路径的值
 
@@ -150,7 +193,15 @@ class JavaObjectProxy:
         """
         return self.proxy_list(get_field(self._obj, path), cls)
 
-    def new_list[T](self, java_list: JavaList, cls: type[T]) -> JavaListProxy[T]:
+    @overload
+    def new_list[T](self, java_list: JavaList, cls: type[T]) -> JavaListProxy[T]: ...
+
+    @overload
+    def new_list(self, java_list: JavaList) -> JavaListProxy[JavaObjectProxy]: ...
+
+    def new_list[T](
+        self, java_list: JavaList, cls: type[T] | None = None
+    ) -> JavaListProxy[T] | JavaListProxy[JavaObjectProxy]:
         """
         生成Java对象列表代理
 
@@ -161,6 +212,8 @@ class JavaObjectProxy:
         Returns:
             T: 生成的Java对象列表代理
         """
+        if cls is None:
+            return JavaListProxy(java_list, self._gateway, JavaObjectProxy)
         return JavaListProxy(java_list, self._gateway, cls)
 
     def __bool__(self) -> bool:
@@ -175,7 +228,7 @@ class JavaObjectProxy:
         """检查对象是否为null"""
         if self._obj is None:
             return True
-        return self._gateway.jvm.java.util.Objects.isNull(self._obj)  # type: ignore
+        return self.class_factory.call_static("java.util.Objects.isNull", (self,), bool)
 
 
 class JavaListProxy[T](JavaObjectProxy, Sequence[T]):
@@ -242,23 +295,66 @@ class JavaListProxy[T](JavaObjectProxy, Sequence[T]):
 class JavaClassFactory(JavaObjectProxy):
     """提供java类实例化方法 此类内的路径为绝对路径"""
 
-    def new(self, clazz: str, *args: Any) -> JavaObject:
+    @staticmethod
+    def __phrase(clazz: str):
+        return clazz.rpartition(".")
+
+    @overload
+    def new(self, clazz: str, args: Iterable[Any] = ()) -> JavaObjectProxy: ...
+    @overload
+    def new[T](self, clazz: str, args: Iterable[Any], cls: type[T]) -> T: ...
+    @overload
+    def new[T](
+        self, clazz: str, args: Iterable[Any], cls: type[T] | None = None
+    ) -> T | JavaObjectProxy: ...
+    def new[T](
+        self, clazz: str, args: Iterable[Any] = (), cls: type[T] | None = None
+    ) -> T | JavaObjectProxy:
         """根据类名实例化java类"""
-        return getattr(self._gateway.jvm, clazz)(*args)  # type: ignore
+        return self.call_static(clazz, args, cls)
 
-    def get_static(self, clazz: str, field: str) -> JavaObject:
+    @overload
+    def get_static(self, clazz: str) -> JavaObjectProxy: ...
+    @overload
+    def get_static[T](self, clazz: str, cls: type[T]) -> T: ...
+    @overload
+    def get_static[T](
+        self, clazz: str, cls: type[T] | None = None
+    ) -> T | JavaObjectProxy: ...
+    def get_static[T](
+        self, clazz: str, cls: type[T] | None = None
+    ) -> T | JavaObjectProxy:
         """获取静态类实例"""
-        return getattr(getattr(self._gateway.jvm, clazz), field)
+        path, _, field = self.__phrase(clazz)
+        return self.proxy(getattr(getattr(self._gateway.jvm, path), field), cls)
 
-    def new_handled[T: JavaObjectProxy](
-        self, clazz: str, handle_class: type[T], *args: Any
-    ) -> T:
-        """根据类名实例化java类并使用handle_class处理"""
-        return handle_class(self.new(clazz, *args), self._gateway)
+    @overload
+    def call_static(self, clazz: str, args: Iterable[Any]) -> JavaObjectProxy: ...
+    @overload
+    def call_static[T](self, clazz: str, args: Iterable[Any], cls: type[T]) -> T: ...
+    @overload
+    def call_static[T](
+        self, clazz: str, args: Iterable[Any], cls: type[T] | None = None
+    ) -> T | JavaObjectProxy: ...
+    def call_static[T](
+        self, clazz: str, args: Iterable[Any], cls: type[T] | None = None
+    ) -> T | JavaObjectProxy:
+        """调用静态方法"""
+        path, _, method = self.__phrase(clazz)
+        return self.proxy(
+            getattr(getattr(self._gateway.jvm, path), method)(
+                *(arg.obj if isinstance(arg, JavaObjectProxy) else arg for arg in args)
+            ),
+            cls,
+        )
 
-    def v3d(self, v: tuple[float, float, float]) -> JavaObject:
-        """创建Vec3d对象 net.minecraft.util.math.Vec3d"""
-        return self.new("net.minecraft.util.math.Vec3d", *(float(w) for w in v))
+
+V = TypeVar("V", bound=JavaObjectProxy)
+CallbackFunction: TypeAlias = Callable[[V, TypeDict], None]
+Posd: TypeAlias = tuple[float, float, float]
+Posi: TypeAlias = tuple[int, int, int]
+Rot: TypeAlias = tuple[float, float]
+PosRot: TypeAlias = tuple[float, float, float, float, float]
 
 
 class PymcMngr(JavaObjectProxy):
@@ -301,7 +397,7 @@ class PymcMngr(JavaObjectProxy):
 
         return self.get("executor", NamedAdvancedExecutor)
 
-    def get_command_source(self, name: str) -> JavaObject:
+    def get_command_source(self, name: str = "PYMC") -> JavaObjectProxy:
         """
         获取命令源对象
 
@@ -312,7 +408,7 @@ class PymcMngr(JavaObjectProxy):
             命令源对象
         """
 
-        return self.call("getCommandSource", JavaObject, name)
+        return self.call("getCommandSource", (name,))
 
     def send_command(self, command: str, name: str) -> None:
         """
@@ -322,7 +418,7 @@ class PymcMngr(JavaObjectProxy):
             command (str): 命令
         """
 
-        self.call("sendCommand", None, command, name)
+        self.call("sendCommand", (command, name), None)
 
     def get_entities(self, selector: str) -> JavaListProxy[Entity]:
         """
@@ -335,7 +431,35 @@ class PymcMngr(JavaObjectProxy):
             实体对象
         """
 
-        return self.call_list("getEntities", Entity, selector)
+        return self.call_list("getEntities", (selector,), Entity)
+
+    def load_entity(
+        self,
+        name: str,
+        world: World,
+        *,
+        nbt: NbtCompound | None = None,
+        where: PosRot | Posd | None = None,
+    ) -> Entity:
+        """加载实体对象
+
+        Args:
+            id (str): 实体id
+
+        Returns:
+            实体对象
+        """
+        if where is None:
+            where = world.spawn_pos.to_v3d().xyz
+
+        if len(where) <= 3:
+            where = where + (0, 0)
+
+        return self.call(
+            "loadEntity",
+            (name, world, nbt, *(float(x) for x in where)),
+            Entity,
+        )
 
     def log(self, msg: str):
         """PymcMngr.logger.info方法的别名"""
@@ -356,7 +480,7 @@ class JavaLogger(JavaObjectProxy):
         Args:
             message (str): 日志消息
         """
-        self.call("debug", None, message)
+        self.call("debug", (message,), None)
 
     def info(self, message: str) -> None:
         """
@@ -365,7 +489,7 @@ class JavaLogger(JavaObjectProxy):
         Args:
             message (str): 日志消息
         """
-        self.call("info", None, message)
+        self.call("info", (message,), None)
 
     def warn(self, message: str) -> None:
         """
@@ -374,7 +498,7 @@ class JavaLogger(JavaObjectProxy):
         Args:
             message (str): 日志消息
         """
-        self.call("warn", None, message)
+        self.call("warn", (message,), None)
 
     def error(self, message: str) -> None:
         """
@@ -383,11 +507,77 @@ class JavaLogger(JavaObjectProxy):
         Args:
             message (str): 日志消息
         """
-        self.call("error", None, message)
+        self.call("error", (message,), None)
 
 
-V = TypeVar("V", bound=JavaObjectProxy)
-CallbackFunction: TypeAlias = Callable[[V, TypeDict], None]
+class V3i(JavaObjectProxy):
+    """net.minecraft.util.math.Vec3i"""
+
+    @property
+    def x(self) -> int:
+        """x"""
+        return self.call("getX", (), int)
+
+    @property
+    def y(self) -> int:
+        """y"""
+        return self.call("getY", (), int)
+
+    @property
+    def z(self) -> int:
+        """z"""
+        return self.call("getZ", (), int)
+
+    @property
+    def xyz(self) -> Posd:
+        """x, y, z"""
+        return self.x, self.y, self.z
+
+    @classmethod
+    def create(cls, source: JavaObjectProxy, vec: Posd) -> V3i:
+        """新建一个V3对象"""
+        return source.class_factory.new(
+            "net.minecraft.util.math.Vec3i", (int(w) for w in vec), V3i
+        )
+
+    def to_v3d(self) -> V3d:
+        """转为V3d对象"""
+        return V3d.create(self, (self.x, self.y, self.z))
+
+
+class V3d(JavaObjectProxy):
+    """net.minecraft.util.math.Vec3d"""
+
+    @property
+    def x(self) -> float:
+        """x"""
+        return self.call("getX", (), float)
+
+    @property
+    def y(self) -> float:
+        """y"""
+        return self.call("getY", (), float)
+
+    @property
+    def z(self) -> float:
+        """z"""
+        return self.call("getZ", (), float)
+
+    @property
+    def xyz(self) -> Posd:
+        """x, y, z"""
+        return self.x, self.y, self.z
+
+    @classmethod
+    def create(cls, source: JavaObjectProxy, vec: Posd) -> V3d:
+        """新建一个V3d对象"""
+        return source.class_factory.new(
+            "net.minecraft.util.math.Vec3d", (int(w) for w in vec), V3d
+        )
+
+
+class BlockPos(V3i):
+    """net.minecraft.util.math.BlockPos"""
 
 
 class Middleman[T: JavaObjectProxy]:
@@ -450,7 +640,7 @@ class NamedAdvancedExecutor(JavaObjectProxy):
             callback (Middleman): 回调函数
             name (str): 任务名称
         """
-        self.call("pushScheduled", None, tick, callback, name)
+        self.call("pushScheduled", (tick, callback, name), None)
 
     def push_continuous(self, callback: Middleman, name: str) -> None:
         """
@@ -460,7 +650,7 @@ class NamedAdvancedExecutor(JavaObjectProxy):
             callback (JavaConsumer): 回调函数
             name (str): 任务名称
         """
-        self.call("pushContinuous", None, callback, name)
+        self.call("pushContinuous", (callback, name), None)
 
     def push_once(self, callback: Middleman, name: str) -> None:
         """
@@ -470,7 +660,42 @@ class NamedAdvancedExecutor(JavaObjectProxy):
             callback (JavaConsumer): 回调函数
             name (str): 任务名称
         """
-        self.call("pushOnce", None, callback, name)
+        self.call("pushOnce", (callback, name), None)
+
+
+class NbtCompound(JavaObjectProxy):
+    """对应net.minecraft.nbt.NbtCompound"""
+
+    @staticmethod
+    def create(source: JavaObjectProxy, **kwargs: Any) -> NbtCompound:
+        """生成一个NbtCompound"""
+        nbt = source.class_factory.new("net.minecraft.nbt.NbtCompound", (), NbtCompound)
+        for key, value in kwargs.items():
+            nbt.put(key, value)
+        return nbt
+
+    def put(self, key: str, value: Any) -> Self:
+        """
+        向 compound 中添加一个元素
+
+        Args:
+            key (str): 元素的 key
+            value (Any): 元素的 value
+        """
+        if isinstance(value, bool):
+            self.call("putBoolean", (key, value), None)
+        elif isinstance(value, int):
+            self.call("putLong", (key, value), None)
+        elif isinstance(value, float):
+            self.call("putDouble", (key, value), None)
+        elif isinstance(value, str):
+            self.call("putString", (key, value), None)
+        elif isinstance(value, NbtCompound):
+            self.call("put", (key, value), None)
+        else:
+            raise TypeError(f"'{type(value)}' is not a valid type for NbtCompound")
+
+        return self
 
 
 class Entity(JavaObjectProxy):
@@ -480,20 +705,40 @@ class Entity(JavaObjectProxy):
     def name(self) -> str:
         """获取实体名称"""
         # return self.obj.getName().getString()  # type: ignore
-        return self.call("getName", JavaObjectProxy).call("getString", str)
+        return self.call("getName").call("getString", (), str)
 
     @property
     def uuid(self) -> str:
         """获取实体UUID"""
         # return self.obj.getUuidAsString()  # type: ignore
-        return self.call("getUuidAsString", str)
+        return self.call("getUuidAsString", (), str)
 
-    def move(self, movement: tuple[float, float, float]):
+    def move(self, movement: Posd):
         """移动一个实体"""
-        x = float(movement[0] + self.call("getX", float))
-        y = float(movement[1] + self.call("getY", float))
-        z = float(movement[2] + self.call("getZ", float))
-        self.call("setPosition", None, x, y, z)
+        x = float(movement[0] + self.call("getX", (), float))
+        y = float(movement[1] + self.call("getY", (), float))
+        z = float(movement[2] + self.call("getZ", (), float))
+        self.call("setPosition", (x, y, z), None)
+
+    def effect(self, effect: str, duration: int, amplifier: int = 1) -> bool:
+        """给一个实体添加一个效果"""
+        return self.call(
+            "addStatusEffect",
+            (
+                self.class_factory.new(
+                    "net.minecraft.entity.effect.StatusEffectInstance",
+                    (
+                        self.class_factory.get_static(
+                            f"net.minecraft.entity.effect.StatusEffects.{effect.upper()}"
+                            # TODO: 更好的方式
+                        ),
+                        duration,
+                        amplifier,
+                    ),
+                ),
+            ),
+            bool,
+        )
 
 
 class Server(JavaObjectProxy):
@@ -513,8 +758,8 @@ class Server(JavaObjectProxy):
         """
         source = self.mngr.get_command_source(name)
         # self.obj.getCommandManager().executeWithPrefix(source, command)  # type: ignore
-        self.call("getCommandManager", JavaObjectProxy).call(
-            "executeWithPrefix", None, source, command
+        self.call("getCommandManager").call(
+            "executeWithPrefix", (source, command), None
         )
 
     def say(self, message: str, name: str = "PYMC"):
@@ -529,3 +774,40 @@ class Server(JavaObjectProxy):
             selector (str): 命令方块中的实体选择器
         """
         return self.mngr.get_entities(selector)
+
+    @property
+    def overworld(self) -> World:
+        """获取主世界"""
+        return self.call("getOverworld", (), World)
+
+
+class World(JavaObjectProxy):
+    """世界对象"""
+
+    @property
+    def spawn_pos(self) -> BlockPos:
+        """世界出生点"""
+        return self.call("getSpawnPos", (), BlockPos)
+
+    @property
+    def overworld(self):
+        """主世界"""
+        return self.call("OVERWORLD")
+
+    @property
+    def nether(self):
+        """下界"""
+        return self.call("NETHER")
+
+    @property
+    def end(self):
+        """末地"""
+        return self.call("END")
+
+    def summon(self, name: str, pos: Posd | None = None, **nbt: Any) -> Entity:
+        """召唤实体"""
+        entity = self.mngr.load_entity(
+            name, self, where=pos, nbt=NbtCompound.create(self, **nbt)
+        )
+        self.call("spawnNewEntityAndPassengers", (entity,), bool)
+        return entity

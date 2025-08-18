@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 @ pymc.AtTick & pymc.ONCE
-def start_timer(server: pymc.Server, data: pymc.TypeDict):
+def start_timer(server: pymc.Server, _data: pymc.TypeDict):
     """开始倒计时"""
     print("Say hello to mc")
     server.mngr.log("Hello from pymc-fabric!")
@@ -59,7 +59,7 @@ def tick(server: pymc.Server, data: pymc.TypeDict):
 
 
 @ pymc.AtTickAfter(20) & pymc.ONCE
-def entity_test(server: pymc.Server, data: pymc.TypeDict):
+def entity_test(server: pymc.Server, _data: pymc.TypeDict):
     """功能测试：实体"""
     server.cmd("say entity test")
     server.cmd("summon snowball")

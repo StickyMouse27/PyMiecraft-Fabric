@@ -17,7 +17,6 @@ from py4j.java_gateway import (
 )
 
 from .utils import LOGGER
-from .javaobj import PymcMngr
 
 
 class Connection:
@@ -32,7 +31,6 @@ class Connection:
     _lock = threading.Lock()
     _connected: bool
     _gateway: JavaGateway | None
-    _mngr: PymcMngr | None
 
     # 全局网关参数配置
     gateway_params: GatewayParameters | None = None
@@ -46,7 +44,6 @@ class Connection:
                     # 初始化实例变量
                     cls._instance._connected = False
                     cls._instance._gateway = None
-                    cls._instance._mngr = None
         return cls._instance
 
     def connect(self) -> JavaGateway:
@@ -72,7 +69,6 @@ class Connection:
             auto_field=True,
             gateway_parameters=self.gateway_params,
         )
-        self._mngr = PymcMngr.from_gateway(self._gateway)
         self._connected = True
 
         LOGGER.info("PyMinecraft connected successfully w")
@@ -98,7 +94,7 @@ class Connection:
                     LOGGER.error("Error while disconnecting from Java gateway: %s", e)
                 finally:
                     # 在连接关闭后清理全局变量引用
-                    del self._gateway, self._mngr
+                    del self._gateway
                     self._connected = False
 
             # 在新线程中执行延迟断开连接
@@ -157,20 +153,6 @@ class Connection:
             return self._gateway
         raise RuntimeError("Cannnot connect to the gateway. This should never happen.")
 
-    def get_mngr(self) -> PymcMngr:
-        """
-        获取PymcMngr实例
-
-        Raises:
-            RuntimeError: 当无法获取工具类实例时抛出
-        """
-        if self._mngr:
-            return self._mngr
-        self.try_connect()
-        if self._mngr:
-            return self._mngr
-        raise RuntimeError("Cannot get manager. This should never happen")
-
     @property
     def connected(self) -> bool:
         """
@@ -191,11 +173,6 @@ class Connection:
         """
         return self._gateway
 
-    @property
-    def pymc_mngr(self) -> PymcMngr | None:
-        """获取PymcMngr实例"""
-        return self._mngr
-
 
 # 创建单例实例并尝试连接
 _connection = Connection()
@@ -210,11 +187,6 @@ def get_gateway() -> JavaGateway:
         JavaGateway: Py4J网关实例
     """
     return _connection.get_gateway()
-
-
-def get_mngr() -> PymcMngr:
-    """获取PymcMngr实例（全局接口）"""
-    return _connection.get_mngr()
 
 
 def disconnect() -> None:
