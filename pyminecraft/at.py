@@ -372,30 +372,30 @@ class AtTickAfter(After[Server]):
         super().__init__("tick", after, *flags, arg_type=Server)
 
 
-class AtEntityInteract(At[Entity]):
+class AtEntity[T: Entity](At[T]):
     """
-    AtEntityInteract装饰器类
+    AtEntity装饰器类
 
-    用于在特定实体被交互时执行任务
+    用于实体相关
     """
 
     Matches: TypeAlias = Literal["name", "uuid"]
-    CheckFunc: TypeAlias = Callable[[Entity, str], bool]
-    _entity: str | Entity
-    _match: Matches | CheckFunc
+    _entity: str | T
+    _match: Matches | Callable[[T, str], bool]
 
     def __init__(
         self,
-        entity: str | Entity,
+        at: str,
+        entity: str | T,
         *flags: RunningFlag,
-        match: Matches | CheckFunc = "name",
+        match: Matches | Callable[[T, str], bool] = "name",
     ) -> None:
-        super().__init__("entity interact", *flags, arg_type=Entity)
+        super().__init__(f"entity {at}", *flags, arg_type=Entity)
 
         self._entity = entity
         self.match = match
 
-    def _modify_before_run(self, obj: Entity) -> bool:
+    def _modify_before_run(self, obj: T) -> bool:
         if isinstance(self._entity, Entity):
             return self._entity.uuid == obj.uuid
 
@@ -408,3 +408,35 @@ class AtEntityInteract(At[Entity]):
             return obj.uuid == self._entity
 
         return False
+
+
+class AtEntityInteract(AtEntity[Entity]):
+    """
+    AtEntityInteract装饰器类
+
+    用于在特定实体被交互时执行任务
+    """
+
+    def __init__(
+        self,
+        entity: str | Entity,
+        *flags: RunningFlag,
+        match: AtEntity.Matches | Callable[[Entity, str], bool] = "name",
+    ) -> None:
+        super().__init__("interact", entity, *flags, match=match)
+
+
+class AtEntityTick(AtEntity[Entity]):
+    """
+    AtEntityTick装饰器类
+
+    用于在特定实体的tick时执行任务
+    """
+
+    def __init__(
+        self,
+        entity: str | Entity,
+        *flags: RunningFlag,
+        match: AtEntity.Matches | Callable[[Entity, str], bool] = "name",
+    ) -> None:
+        super().__init__("tick", entity, *flags, match=match)

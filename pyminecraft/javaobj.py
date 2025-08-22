@@ -663,18 +663,39 @@ class NamedAdvancedExecutor(JavaObjectProxy):
         self.call("pushOnce", (callback, name), None)
 
 
-class NbtCompound(JavaObjectProxy):
+class NbtValue(JavaObjectProxy):
+    """nbt基类"""
+
+    BASE = "net.minecraft.nbt.%s.of"
+    TYPE_MAP: dict[type, str] = {
+        bool: BASE % "NbtByte",
+        int: BASE % "NbtLong",
+        float: BASE % "NbtDouble",
+        str: BASE % "NbtString",
+    }
+
+    @staticmethod
+    def of(source: JavaObjectProxy, value: NbtType):
+        """将Python对象转为NbtValue"""
+        if isinstance(value, NbtValue):
+            return value
+        return source.class_factory.call_static(
+            NbtValue.TYPE_MAP[type(value)], (value,), NbtValue
+        )
+
+
+class NbtCompound(NbtValue):
     """对应net.minecraft.nbt.NbtCompound"""
 
     @staticmethod
-    def create(source: JavaObjectProxy, **kwargs: Any) -> NbtCompound:
+    def create(source: JavaObjectProxy, **kwargs: NbtType) -> NbtCompound:
         """生成一个NbtCompound"""
         nbt = source.class_factory.new("net.minecraft.nbt.NbtCompound", (), NbtCompound)
         for key, value in kwargs.items():
             nbt.put(key, value)
         return nbt
 
-    def put(self, key: str, value: Any) -> Self:
+    def put(self, key: str, value: NbtType) -> Self:
         """
         向 compound 中添加一个元素
 
@@ -682,20 +703,46 @@ class NbtCompound(JavaObjectProxy):
             key (str): 元素的 key
             value (Any): 元素的 value
         """
-        if isinstance(value, bool):
-            self.call("putBoolean", (key, value), None)
-        elif isinstance(value, int):
-            self.call("putLong", (key, value), None)
-        elif isinstance(value, float):
-            self.call("putDouble", (key, value), None)
-        elif isinstance(value, str):
-            self.call("putString", (key, value), None)
-        elif isinstance(value, NbtCompound):
-            self.call("put", (key, value), None)
+        if isinstance(value, list):
+            self.call("put", (key, NbtList.create(self, *value)), None)
+        elif isinstance(value, dict):
+            self.call("put", (key, NbtCompound.create(self, **value)), None)
         else:
-            raise TypeError(f"'{type(value)}' is not a valid type for NbtCompound")
-
+            self.call("put", (key, self.of(self, value)), None)
         return self
+
+
+class NbtList[T: NbtType](NbtValue):
+    """对应net.minecraft.nbt.NbtList"""
+
+    @staticmethod
+    def create(source: JavaObjectProxy, *values: T) -> NbtList[T]:
+        """生成一个NbtList"""
+        nbt = source.class_factory.new("net.minecraft.nbt.NbtList", (), NbtList)
+        for value in values:
+            nbt.add(value)
+        return nbt
+
+    def add(self, value: T) -> Self:
+        """向列表中添加一个元素"""
+        if isinstance(value, list):
+            self.call(
+                "add", (self.call("size", (), int), NbtList.create(self, *value)), None
+            )
+        elif isinstance(value, dict):
+            self.call(
+                "add",
+                (self.call("size", (), int), NbtCompound.create(self, **value)),
+                None,
+            )
+        else:
+            self.call("add", (self.call("size", (), int), self.of(self, value)), None)
+        return self
+
+
+NbtType: TypeAlias = (
+    "int | str | float | bool | dict[str, NbtType] | list[NbtType] | NbtValue"
+)
 
 
 class Entity(JavaObjectProxy):
@@ -804,7 +851,7 @@ class World(JavaObjectProxy):
         """末地"""
         return self.call("END")
 
-    def summon(self, name: str, pos: Posd | None = None, **nbt: Any) -> Entity:
+    def summon(self, name: str, pos: Posd | None = None, **nbt: NbtType) -> Entity:
         """召唤实体"""
         entity = self.mngr.load_entity(
             name, self, where=pos, nbt=NbtCompound.create(self, **nbt)

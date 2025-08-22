@@ -2,6 +2,7 @@ package top.fish1000.pymcfabric.mixin;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.At;
 
@@ -14,7 +15,16 @@ public abstract class EntityMixin {
     @Inject(method = "interact(Lnet/minecraft/entity/player/PlayerEntity;Lnet/minecraft/util/Hand;)Lnet/minecraft/util/ActionResult;", at = @At("HEAD"))
     private void entityInteract(CallbackInfoReturnable<ActionResult> info) {
         PymcMngr.tick("entity interact", ((Entity) (Object) this));
-        System.out.println("entity interact: " + ((Entity) (Object) this).getName().getString() + " @ tick "
-                + PymcMngr.server.getTicks());
+        // System.out.println("entity interact: " + ((Entity) (Object)
+        // this).getName().getString() + " @ tick "
+        // + PymcMngr.server.getTicks());
+    }
+
+    @Inject(method = "tick()V", at = @At("HEAD"))
+    private void entityTick(CallbackInfo info) {
+        PymcMngr.tick("entity tick", ((Entity) (Object) this));
+        // System.out.println("entity tick: " + ((Entity) (Object)
+        // this).getName().getString() + " @ tick "
+        // + PymcMngr.server.getTicks());
     }
 }

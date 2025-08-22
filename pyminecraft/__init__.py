@@ -9,7 +9,9 @@ from .at import (
     AtTick,
     After,
     AtTickAfter,
+    AtEntity,
     AtEntityInteract,
+    AtEntityTick,
     RunningFlag,
     MaxTimesFlag,
 )
