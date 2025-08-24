@@ -351,10 +351,10 @@ class JavaClassFactory(JavaObjectProxy):
 
 V = TypeVar("V", bound=JavaObjectProxy)
 CallbackFunction: TypeAlias = Callable[[V, TypeDict], None]
-Posd: TypeAlias = tuple[float, float, float]
-Posi: TypeAlias = tuple[int, int, int]
-Rot: TypeAlias = tuple[float, float]
-PosRot: TypeAlias = tuple[float, float, float, float, float]
+V3dTup: TypeAlias = tuple[float, float, float]
+V3iTup: TypeAlias = tuple[int, int, int]
+RotTup: TypeAlias = tuple[float, float]
+PosRotTup: TypeAlias = tuple[float, float, float, float, float]
 
 
 class PymcMngr(JavaObjectProxy):
@@ -439,7 +439,7 @@ class PymcMngr(JavaObjectProxy):
         world: World,
         *,
         nbt: NbtCompound | None = None,
-        where: PosRot | Posd | None = None,
+        where: PosRotTup | V3dTup | None = None,
     ) -> Entity:
         """加载实体对象
 
@@ -529,12 +529,18 @@ class V3i(JavaObjectProxy):
         return self.call("getZ", (), int)
 
     @property
-    def xyz(self) -> Posd:
+    def xyz(self) -> V3iTup:
         """x, y, z"""
         return self.x, self.y, self.z
 
+    def __iter__(self):
+        """允许将 V3d 解包为 (x, y, z)"""
+        yield self.x
+        yield self.y
+        yield self.z
+
     @classmethod
-    def create(cls, source: JavaObjectProxy, vec: Posd) -> V3i:
+    def create(cls, source: JavaObjectProxy, vec: V3iTup) -> V3i:
         """新建一个V3对象"""
         return source.class_factory.new(
             "net.minecraft.util.math.Vec3i", (int(w) for w in vec), V3i
@@ -564,12 +570,18 @@ class V3d(JavaObjectProxy):
         return self.call("getZ", (), float)
 
     @property
-    def xyz(self) -> Posd:
+    def xyz(self) -> V3dTup:
         """x, y, z"""
         return self.x, self.y, self.z
 
+    def __iter__(self):
+        """允许将 V3d 解包为 (x, y, z)"""
+        yield self.x
+        yield self.y
+        yield self.z
+
     @classmethod
-    def create(cls, source: JavaObjectProxy, vec: Posd) -> V3d:
+    def create(cls, source: JavaObjectProxy, vec: V3dTup) -> V3d:
         """新建一个V3d对象"""
         return source.class_factory.new(
             "net.minecraft.util.math.Vec3d", (int(w) for w in vec), V3d
@@ -631,7 +643,7 @@ class NamedAdvancedExecutor(JavaObjectProxy):
     包括计划任务、连续任务和一次性任务
     """
 
-    def push_scheduled(self, tick: int, callback: Middleman, name: str) -> None:
+    def push_scheduled(self, tick: int, callback: Middleman, name: str) -> int:
         """
         添加一个计划任务，在指定tick执行一次
 
@@ -640,9 +652,18 @@ class NamedAdvancedExecutor(JavaObjectProxy):
             callback (Middleman): 回调函数
             name (str): 任务名称
         """
-        self.call("pushScheduled", (tick, callback, name), None)
+        return self.call("pushScheduled", (tick, callback, name), int)
 
-    def push_continuous(self, callback: Middleman, name: str) -> None:
+    def remove_scheduled(self, identity: int) -> None:
+        """
+        删除一个计划任务
+
+        Args:
+            identity (int): 任务ID
+        """
+        self.call("removeScheduled", (identity,), int)
+
+    def push_continuous(self, callback: Middleman, name: str) -> int:
         """
         添加一个连续任务，每个tick都会执行
 
@@ -650,9 +671,18 @@ class NamedAdvancedExecutor(JavaObjectProxy):
             callback (JavaConsumer): 回调函数
             name (str): 任务名称
         """
-        self.call("pushContinuous", (callback, name), None)
+        return self.call("pushContinuous", (callback, name), int)
 
-    def push_once(self, callback: Middleman, name: str) -> None:
+    def remove_continuous(self, identity: int) -> None:
+        """
+        删除一个连续任务
+
+        Args:
+            identity (int): 任务ID
+        """
+        self.call("removeContinuous", (identity,), int)
+
+    def push_once(self, callback: Middleman, name: str) -> int:
         """
         添加一个一次性任务，在下一个匹配的tick执行后自动移除
 
@@ -660,7 +690,16 @@ class NamedAdvancedExecutor(JavaObjectProxy):
             callback (JavaConsumer): 回调函数
             name (str): 任务名称
         """
-        self.call("pushOnce", (callback, name), None)
+        return self.call("pushOnce", (callback, name), int)
+
+    def remove_once(self, identity: int) -> None:
+        """
+        移除一个一次性任务
+
+        Args:
+            identity (int): 任务id
+        """
+        self.call("removeOnce", (identity,), int)
 
 
 class NbtValue(JavaObjectProxy):
@@ -760,12 +799,58 @@ class Entity(JavaObjectProxy):
         # return self.obj.getUuidAsString()  # type: ignore
         return self.call("getUuidAsString", (), str)
 
-    def move(self, movement: Posd):
+    def move(self, movement: V3dTup):
         """移动一个实体"""
         x = float(movement[0] + self.call("getX", (), float))
         y = float(movement[1] + self.call("getY", (), float))
         z = float(movement[2] + self.call("getZ", (), float))
         self.call("setPosition", (x, y, z), None)
+
+    @property
+    def pos(self) -> V3d:
+        """获取实体的位置"""
+        return self.call("getPos", (), V3d)
+
+    @pos.setter
+    def pos(self, pos: V3d | V3dTup) -> None:
+        """设置实体的位置"""
+        self.call("setPosition", (*pos,), None)
+
+    @property
+    def rotation(self) -> RotTup:
+        """获取实体的旋转角度（俯仰角、偏航角）"""
+        return self.pitch, self.yaw
+
+    @rotation.setter
+    def rotation(self, rot: RotTup) -> None:
+        """设置实体的旋转角度（俯仰角、偏航角）"""
+        self.call("setRotation", (*rot,), None)
+
+    @property
+    def pitch(self) -> float:
+        """获取实体的俯仰角度"""
+        return self.call("getPitch", (), float)
+
+    @pitch.setter
+    def pitch(self, pitch: float) -> None:
+        """设置实体的俯仰角度"""
+        self.call("setPitch", (pitch,), None)
+
+    @property
+    def yaw(self) -> float:
+        """获取实体的偏航角度"""
+        return self.call("getYaw", (), float)
+
+    @yaw.setter
+    def yaw(self, yaw: float) -> None:
+        """设置实体的偏航角度"""
+        self.call("setYaw", (yaw,), None)
+
+    def refresh_position_and_angles(
+        self, x: float, y: float, z: float, yaw: float, pitch: float
+    ) -> None:
+        """刷新实体的位置和角度"""
+        self.call("refreshPositionAndAngles", (x, y, z, yaw, pitch), None)
 
     def effect(self, effect: str, duration: int, amplifier: int = 1) -> bool:
         """给一个实体添加一个效果"""
@@ -851,7 +936,7 @@ class World(JavaObjectProxy):
         """末地"""
         return self.call("END")
 
-    def summon(self, name: str, pos: Posd | None = None, **nbt: NbtType) -> Entity:
+    def summon(self, name: str, pos: V3dTup | None = None, **nbt: NbtType) -> Entity:
         """召唤实体"""
         entity = self.mngr.load_entity(
             name, self, where=pos, nbt=NbtCompound.create(self, **nbt)

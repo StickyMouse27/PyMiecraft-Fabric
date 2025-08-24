@@ -55,9 +55,13 @@ def init(server: pymc.Server, _data: pymc.TypeDict):
     }
     firework = server.overworld.summon("firework_rocket", (0, 67, 0), **firework_data)
 
-    @pymc.AtEntityTick(firework) & pymc.ALWAYS
+    @ pymc.AtEntityTick(firework) & pymc.ALWAYS
     def tick(entity: pymc.Entity, data: pymc.TypeDict) -> None:
-        server.overworld.summon("firework_rocket", entity.)        
+        if random.randint(0, 10) != 0:
+            return
+        server.overworld.summon(
+            "firework_rocket", entity.pos.xyz, **firework_data
+        ).rotation = (random.random() * 90, random.random() * 360)
 
 
 # @ pymc.AtEntityInteract("Creeper", match="uuid") & pymc.ALWAYS

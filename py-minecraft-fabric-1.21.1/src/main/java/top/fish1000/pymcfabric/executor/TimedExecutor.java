@@ -1,13 +1,14 @@
 package top.fish1000.pymcfabric.executor;
 
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-public abstract class TimedExecutor<T, S extends Supplier<Consumer<T>>, L extends List<S>> {
+public abstract class TimedExecutor<T, S extends Supplier<Consumer<T>>, L extends List<ExecutorIdentifier<S>>> {
     public enum TickType {
         RELATIVE, ABSOLUTE;
 
@@ -33,13 +34,19 @@ public abstract class TimedExecutor<T, S extends Supplier<Consumer<T>>, L extend
      * @param callbackSupplier 命令
      * @param tickType         是否是相对tick
      */
-    public void push(int tick, S callbackSupplier, TickType tickType) {
+    public int push(int tick, S callbackSupplier, TickType tickType) {
         int currentTick = tickSupplier.getAsInt();
         tick = tickType.convert(tick, currentTick);
         if (tick < currentTick) {
             throw new IllegalArgumentException("Cannot execute for past tick");
         }
-        callbackScheduled.computeIfAbsent(tick, k -> listSupplier.get()).add(callbackSupplier);
+        ExecutorIdentifier<S> id = ExecutorIdentifier.of(callbackSupplier);
+        callbackScheduled.computeIfAbsent(tick, k -> listSupplier.get()).add(id);
+        return id.id;
+    }
+
+    public void remove(int id) {
+        callbackScheduled.values().forEach(list -> list.removeIf(callback -> callback.id == id));
     }
 
     /**
@@ -52,7 +59,7 @@ public abstract class TimedExecutor<T, S extends Supplier<Consumer<T>>, L extend
         L exes = callbackScheduled.remove(currentTick);
         if (exes != null) {
             System.out.println("tick " + currentTick);
-            exes.forEach(callback -> callback.get().accept(data));
+            exes.forEach(callback -> callback.get().get().accept(data));
         }
     }
 }

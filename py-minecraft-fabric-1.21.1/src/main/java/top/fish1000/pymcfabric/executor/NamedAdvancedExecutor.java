@@ -9,8 +9,8 @@ import top.fish1000.pymcfabric.PymcMngr;
 
 public class NamedAdvancedExecutor<T> extends NamedExecutor<T> {
 
-    protected final List<NamedValue<Consumer<T>>> callbackContinuousList;
-    protected final List<NamedValue<Consumer<T>>> callbackOnceList;
+    protected final List<NamedExecutorIdentifier<Consumer<T>>> callbackContinuousList;
+    protected final List<NamedExecutorIdentifier<Consumer<T>>> callbackOnceList;
 
     public NamedAdvancedExecutor(IntSupplier tickSupplier) {
         super(tickSupplier);
@@ -24,18 +24,18 @@ public class NamedAdvancedExecutor<T> extends NamedExecutor<T> {
         // name);
         super.tick(data, name);
         callbackContinuousList.forEach(callback -> {
-            if (callback.name().equals(name)) {
-                PymcMngr.LOGGER.info("Found callback(continuous)");
-                callback.value().accept(data);
+            if (callback.name.equals(name)) {
+                PymcMngr.LOGGER.info("Found callback(continuous) tick{} @ {}", tickSupplier.getAsInt(), name);
+                callback.data.accept(data);
             }
         });
         callbackOnceList.forEach(callback -> {
-            if (callback.name().equals(name)) {
-                callback.value().accept(data);
-                PymcMngr.LOGGER.info("Found callback(once), removed");
+            if (callback.name.equals(name)) {
+                callback.data.accept(data);
+                PymcMngr.LOGGER.info("Found callback(once), removed tick{} @ {}", tickSupplier.getAsInt(), name);
             }
         });
-        callbackOnceList.removeIf(nv -> nv.name().equals(name));
+        callbackOnceList.removeIf(nv -> nv.name.equals(name));
     }
 
     public void tryTick(T data, String name) {
@@ -51,18 +51,37 @@ public class NamedAdvancedExecutor<T> extends NamedExecutor<T> {
         }
     }
 
-    public void pushScheduled(int tick, Consumer<T> callback, String name) {
+    public int pushScheduled(int tick, Consumer<T> callback, String name) {
         PymcMngr.LOGGER.info("Pushing callback(scheduled): tick{} @ {}", tickSupplier.getAsInt(), name);
-        super.push(tick, callback, name, TickType.RELATIVE);
+        return super.push(tick, callback, name, TickType.RELATIVE);
     }
 
-    public void pushOnce(Consumer<T> callback, String name) {
+    public void removeScheduled(int id) {
+        PymcMngr.LOGGER.info("Removing callback(scheduled): id: {}", id);
+        super.remove(id);
+    }
+
+    public int pushOnce(Consumer<T> callback, String name) {
         PymcMngr.LOGGER.info("Pushing callback(once): tick{} @ {}", tickSupplier.getAsInt(), name);
-        callbackOnceList.add(new NamedValue<>(callback, name));
+        NamedExecutorIdentifier<Consumer<T>> id = new NamedExecutorIdentifier<>(callback, name);
+        callbackOnceList.add(id);
+        return id.id;
     }
 
-    public void pushContinuous(Consumer<T> callback, String name) {
+    public void removeOnce(int id) {
+        PymcMngr.LOGGER.info("Removing callback(once): {}", id);
+        callbackOnceList.removeIf(identifier -> identifier.id == id);
+    }
+
+    public int pushContinuous(Consumer<T> callback, String name) {
         PymcMngr.LOGGER.info("Pushing callback(continuous): tick{} @ {}", tickSupplier.getAsInt(), name);
-        callbackContinuousList.add(new NamedValue<>(callback, name));
+        NamedExecutorIdentifier<Consumer<T>> id = new NamedExecutorIdentifier<>(callback, name);
+        callbackContinuousList.add(id);
+        return id.id;
+    }
+
+    public void removeContinuous(int id) {
+        PymcMngr.LOGGER.info("Removing callback(continuous): id{}", id);
+        callbackContinuousList.removeIf(identifier -> identifier.id == id);
     }
 }

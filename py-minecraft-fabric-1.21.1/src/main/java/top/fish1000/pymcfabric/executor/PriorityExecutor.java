@@ -5,7 +5,8 @@ import java.util.function.Consumer;
 import java.util.function.IntSupplier;
 
 public class PriorityExecutor<T>
-        extends TimedExecutor<T, PriorityValue<Consumer<T>>, LinkedList<PriorityValue<Consumer<T>>>> {
+        extends
+        TimedExecutor<T, PriorityValue<Consumer<T>>, LinkedList<ExecutorIdentifier<PriorityValue<Consumer<T>>>>> {
 
     PriorityExecutor(IntSupplier tickSupplier) {
         super(tickSupplier, LinkedList::new);
@@ -17,8 +18,8 @@ public class PriorityExecutor<T>
 
     public void tick(T data) {
         int currentTick = tickSupplier.getAsInt();
-        LinkedList<PriorityValue<Consumer<T>>> toRun = callbackScheduled.get(currentTick);
-        toRun.sort((a, b) -> a.priority() - b.priority());
+        LinkedList<ExecutorIdentifier<PriorityValue<Consumer<T>>>> toRun = callbackScheduled.get(currentTick);
+        toRun.sort((a, b) -> a.get().priority() - b.get().priority());
         callbackScheduled.replace(currentTick, toRun);
         super.tick(data);
     }

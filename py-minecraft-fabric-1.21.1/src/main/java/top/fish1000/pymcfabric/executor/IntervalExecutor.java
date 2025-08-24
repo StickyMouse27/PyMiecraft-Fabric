@@ -6,7 +6,8 @@ import java.util.function.Consumer;
 import java.util.function.IntSupplier;
 
 public class IntervalExecutor<T>
-        extends TimedExecutor<T, IntervalValue<Consumer<T>>, LinkedList<IntervalValue<Consumer<T>>>> {
+        extends
+        TimedExecutor<T, IntervalValue<Consumer<T>>, LinkedList<ExecutorIdentifier<IntervalValue<Consumer<T>>>>> {
 
     private final PriorityQueue<IntervalValue<Consumer<T>>> intervalScheduled = new PriorityQueue<>(
             (a, b) -> a.offset() - b.offset());

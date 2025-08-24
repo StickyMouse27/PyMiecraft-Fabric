@@ -5,7 +5,8 @@ import java.util.function.Consumer;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
-public class SimpleExecutor<T> extends TimedExecutor<T, Supplier<Consumer<T>>, LinkedList<Supplier<Consumer<T>>>> {
+public class SimpleExecutor<T>
+        extends TimedExecutor<T, Supplier<Consumer<T>>, LinkedList<ExecutorIdentifier<Supplier<Consumer<T>>>>> {
     public SimpleExecutor(IntSupplier tickSupplier) {
         super(tickSupplier, LinkedList::new);
     }

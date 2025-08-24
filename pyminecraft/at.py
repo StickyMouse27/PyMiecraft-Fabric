@@ -389,8 +389,9 @@ class AtEntity[T: Entity](At[T]):
         entity: str | T,
         *flags: RunningFlag,
         match: Matches | Callable[[T, str], bool] = "name",
+        arg_type: type[T] = Entity,
     ) -> None:
-        super().__init__(f"entity {at}", *flags, arg_type=Entity)
+        super().__init__(f"entity {at}", *flags, arg_type=arg_type)
 
         self._entity = entity
         self.match = match
