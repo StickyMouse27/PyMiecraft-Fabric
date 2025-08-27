@@ -20,7 +20,7 @@ def start_timer(server: pymc.Server, _data: pymc.TypeDict):
     server.mngr.log("Hello from pymc-fabric!")
     server.cmd("say hello!!!!!!")
 
-    at = pymc.AtTickAfter(20 * 5) & pymc.ALWAYS | func_after_5_sec
+    at = pymc.AtTick & pymc.After(20 * 5) & pymc.ALWAYS | func_after_5_sec
     at.data[dict]["counter"] = 1
 
     # 也可以使用全局变量实现
@@ -37,28 +37,28 @@ def func_after_5_sec(server: pymc.Server, data: pymc.TypeDict):
 
     # 计数器实现和MaxTimesFlag实现效果相同
     if data[dict]["counter"] >= 6:
-        timer = data[pymc.AtTickAfter]
+        timer = data[pymc.At]
         timer.cancel()
         print("total 30 sec passed, stoped")
         server.cmd("say total 30 sec passed, stoped")
 
 
-@ pymc.AtTickAfter(20) & pymc.ALWAYS & pymc.MaxTimesFlag(64)
+@ pymc.AtTick & pymc.After(20) & pymc.ALWAYS & pymc.MaxTimes(64)
 def tick(server: pymc.Server, data: pymc.TypeDict):
     """每秒给大家一个钻石"""
 
-    times_left = data[pymc.MaxTimesFlag].times_left
+    times_left = data[pymc.MaxTimes].times_left
     print(f"They must need more diamonds (diamond: {64 - times_left}/64)")
     server.cmd("say Wanna diamonds?")
     server.cmd("give @a diamond")
 
-    if data[pymc.MaxTimesFlag].the_last:
+    if data[pymc.MaxTimes].the_last:
         print("They are full of diamonds")
 
         # pymc.connection.disconnect()
 
 
-@ pymc.AtTickAfter(20) & pymc.ONCE
+@ pymc.AtTick & pymc.After(20) & pymc.ONCE
 def entity_test(server: pymc.Server, _data: pymc.TypeDict):
     """功能测试：实体"""
     server.cmd("say entity test")

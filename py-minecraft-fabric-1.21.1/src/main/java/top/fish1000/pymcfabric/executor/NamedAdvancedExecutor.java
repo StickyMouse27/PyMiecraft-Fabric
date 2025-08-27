@@ -84,4 +84,10 @@ public class NamedAdvancedExecutor<T> extends NamedExecutor<T> {
         PymcMngr.LOGGER.info("Removing callback(continuous): id{}", id);
         callbackContinuousList.removeIf(identifier -> identifier.id == id);
     }
+
+    public void ezRemove(int id) {
+        removeScheduled(id);
+        removeOnce(id);
+        removeContinuous(id);
+    }
 }

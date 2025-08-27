@@ -1,7 +1,6 @@
 package top.fish1000.pymcfabric.executor;
 
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;

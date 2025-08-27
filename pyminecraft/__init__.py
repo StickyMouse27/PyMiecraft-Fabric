@@ -7,13 +7,12 @@ Link: https://github.com/PyMinecraft/PyMinecraft-Fabric
 from .at import (
     At,
     AtTick,
-    After,
-    AtTickAfter,
     AtEntity,
     AtEntityInteract,
     AtEntityTick,
     RunningFlag,
-    MaxTimesFlag,
+    After,
+    MaxTimes,
 )
 from .javaobj import Server, NamedAdvancedExecutor, Entity
 from .utils import LOGGER

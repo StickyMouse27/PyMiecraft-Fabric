@@ -56,7 +56,7 @@ def init(server: pymc.Server, _data: pymc.TypeDict):
     firework = server.overworld.summon("firework_rocket", (0, 67, 0), **firework_data)
 
     @ pymc.AtEntityTick(firework) & pymc.ALWAYS
-    def tick(entity: pymc.Entity, data: pymc.TypeDict) -> None:
+    def tick(entity: pymc.Entity, _data: pymc.TypeDict) -> None:
         if random.randint(0, 10) != 0:
             return
         server.overworld.summon(

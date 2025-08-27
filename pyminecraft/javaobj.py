@@ -701,6 +701,15 @@ class NamedAdvancedExecutor(JavaObjectProxy):
         """
         self.call("removeOnce", (identity,), int)
 
+    def remove(self, identity: int) -> None:
+        """
+        移除一个任务
+
+        Args:
+            identity (int): 任务id
+        """
+        self.call("ezRemove", (identity,), int)
+
 
 class NbtValue(JavaObjectProxy):
     """nbt基类"""
