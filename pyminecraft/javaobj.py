@@ -712,6 +712,12 @@ class NamedAdvancedExecutor(JavaObjectProxy):
         """
         self.call("ezRemove", (identity,), int)
 
+    def remove_all(self) -> None:
+        """
+        移除所有任务
+        """
+        self.call("ezRemoveAll", (), None)
+
 
 class NbtValue(JavaObjectProxy):
     """nbt基类"""
@@ -801,21 +807,34 @@ class Entity(JavaObjectProxy):
     @property
     def name(self) -> str:
         """获取实体名称"""
-        # return self.obj.getName().getString()  # type: ignore
         return self.call("getName").call("getString", (), str)
 
     @property
     def uuid(self) -> str:
         """获取实体UUID"""
-        # return self.obj.getUuidAsString()  # type: ignore
         return self.call("getUuidAsString", (), str)
 
-    def move(self, movement: V3dTup):
+    def move(self, movement: V3dTup) -> None:
         """移动一个实体"""
-        x = float(movement[0] + self.call("getX", (), float))
-        y = float(movement[1] + self.call("getY", (), float))
-        z = float(movement[2] + self.call("getZ", (), float))
-        self.call("setPosition", (x, y, z), None)
+        x = float(movement[0] + self.x)
+        y = float(movement[1] + self.y)
+        z = float(movement[2] + self.z)
+        self.pos = x, y, z
+
+    @property
+    def x(self) -> float:
+        """获取实体的X坐标"""
+        return self.call("getX", (), float)
+
+    @property
+    def y(self) -> float:
+        """获取实体的Y坐标"""
+        return self.call("getY", (), float)
+
+    @property
+    def z(self) -> float:
+        """获取实体的Z坐标"""
+        return self.call("getZ", (), float)
 
     @property
     def pos(self) -> V3d:
@@ -825,7 +844,10 @@ class Entity(JavaObjectProxy):
     @pos.setter
     def pos(self, pos: V3d | V3dTup) -> None:
         """设置实体的位置"""
-        self.call("setPosition", (*pos,), None)
+        if isinstance(pos, tuple):
+            self.call("setPosition", (*pos,), None)
+        else:
+            self.call("setPosition", (pos,), None)
 
     @property
     def rotation(self) -> RotTup:
@@ -857,11 +879,27 @@ class Entity(JavaObjectProxy):
         """设置实体的偏航角度"""
         self.call("setYaw", (yaw,), None)
 
-    def refresh_position_and_angles(
-        self, x: float, y: float, z: float, yaw: float, pitch: float
-    ) -> None:
+    @property
+    def velocity(self) -> V3d:
+        """获取实体的移动速度"""
+        return self.call("getVelocity", (), V3d)
+
+    @velocity.setter
+    def velocity(self, velocity: V3d | V3dTup) -> None:
+        """设置实体的移动速度"""
+        if isinstance(velocity, tuple):
+            self.call("setVelocity", (*velocity,), None)
+        else:
+            self.call("setVelocity", (velocity,), None)
+
+    @property
+    def removed(self) -> bool:
+        """判断实体是否被移除"""
+        return self.call("isRemoved", (), bool)
+
+    def refresh_position_and_angles(self, pos_rot: PosRotTup) -> None:
         """刷新实体的位置和角度"""
-        self.call("refreshPositionAndAngles", (x, y, z, yaw, pitch), None)
+        self.call("refreshPositionAndAngles", pos_rot, None)
 
     def effect(self, effect: str, duration: int, amplifier: int = 1) -> bool:
         """给一个实体添加一个效果"""
@@ -900,7 +938,6 @@ class Server(JavaObjectProxy):
             str (str): 要执行的命令字符串
         """
         source = self.mngr.get_command_source(name)
-        # self.obj.getCommandManager().executeWithPrefix(source, command)  # type: ignore
         self.call("getCommandManager").call(
             "executeWithPrefix", (source, command), None
         )

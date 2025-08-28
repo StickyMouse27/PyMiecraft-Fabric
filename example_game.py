@@ -5,13 +5,12 @@ PyMiecraft Fabric
 Link: https://github.com/StickyMouse27/PyMiecraft-Fabric
 """
 
-# import logging
 import random
+import logging
 
 import pyminecraft as pymc
 
-# logging.basicConfig(level=logging.DEBUG)
-
+logging.basicConfig(level=logging.INFO)
 
 # @ pymc.AtTick & pymc.ONCE
 # def init(server: pymc.Server, _data: pymc.TypeDict) -> None:
@@ -36,6 +35,8 @@ import pyminecraft as pymc
 @ pymc.AtTick & pymc.ONCE
 def init(server: pymc.Server, _data: pymc.TypeDict):
     """烟花"""
+    # _data[pymc.AtTick].executor.remove_all()
+
     firework_data: dict = {
         "LifeTime": 20,
         "FireworksItem": {
@@ -57,11 +58,20 @@ def init(server: pymc.Server, _data: pymc.TypeDict):
 
     @ pymc.AtEntityTick(firework) & pymc.ALWAYS
     def tick(entity: pymc.Entity, _data: pymc.TypeDict) -> None:
-        if random.randint(0, 10) != 0:
+        if random.randint(0, 2) != 0:
+            print(22222)
             return
-        server.overworld.summon(
-            "firework_rocket", entity.pos.xyz, **firework_data
-        ).rotation = (random.random() * 90, random.random() * 360)
+        print(111111)
+        new = server.overworld.summon(
+            "firework_rocket", entity.pos.xyz, **firework_data, ShotAtAngle=True
+        )
+
+        def r():
+            return random.random() * 2 - 1
+
+        new.move((r(), r(), r()))
+        new.velocity = (r(), random.random() * 2, r())
+        (pymc.AtEntityTick(new) & pymc.ALWAYS)(tick)
 
 
 # @ pymc.AtEntityInteract("Creeper", match="uuid") & pymc.ALWAYS

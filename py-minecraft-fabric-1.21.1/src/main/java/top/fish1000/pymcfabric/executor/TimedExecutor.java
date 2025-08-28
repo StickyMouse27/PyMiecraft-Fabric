@@ -48,6 +48,10 @@ public abstract class TimedExecutor<T, S extends Supplier<Consumer<T>>, L extend
         callbackScheduled.values().forEach(list -> list.removeIf(callback -> callback.id == id));
     }
 
+    public void removeAll() {
+        callbackScheduled.clear();
+    }
+
     /**
      * 执行当前tick的所有命令
      * 
