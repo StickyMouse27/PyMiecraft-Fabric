@@ -804,6 +804,11 @@ NbtType: TypeAlias = (
 class Entity(JavaObjectProxy):
     """对应net.minecraft.entity.Entity"""
 
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, Entity):
+            return False
+        return self.uuid == value.uuid
+
     @property
     def name(self) -> str:
         """获取实体名称"""

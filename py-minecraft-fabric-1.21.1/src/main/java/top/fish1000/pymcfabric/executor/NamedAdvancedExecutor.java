@@ -4,8 +4,6 @@ import java.util.LinkedList;
 import java.util.function.Consumer;
 import java.util.function.IntSupplier;
 
-import com.ibm.icu.impl.Pair;
-
 import top.fish1000.pymcfabric.PymcMngr;
 
 public class NamedAdvancedExecutor<T> extends NamedExecutor<T> {
@@ -32,7 +30,7 @@ public class NamedAdvancedExecutor<T> extends NamedExecutor<T> {
 
     @Override
     public void tick(T data, String name) {
-        // Utils.LOGGER.info("Looking for callback: tick{} @ {}", tickSupplier.get(),
+        // Utils.LOGGER.trace("Looking for callback: tick{} @ {}", tickSupplier.get(),
         // name);
         toRemove.forEach(id -> {
             callbackContinuousList.removeIf(callback -> callback.id == id);
@@ -59,21 +57,21 @@ public class NamedAdvancedExecutor<T> extends NamedExecutor<T> {
         callbackOnceList.addAll(toAddOnce);
         toAddOnce.clear();
         toAddScheduled.forEach(id -> {
-            push(id.first, id.second, TickType.RELATIVE);
+            push(id.first(), id.second(), TickType.RELATIVE);
         });
         toAddScheduled.clear();
 
         super.tick(data, name);
         callbackContinuousList.forEach(callback -> {
             if (callback.name.equals(name)) {
-                PymcMngr.LOGGER.info("Found callback(continuous) tick{} @ {}", tickSupplier.getAsInt(), name);
+                PymcMngr.LOGGER.trace("Found callback(continuous) tick{} @ {}", tickSupplier.getAsInt(), name);
                 callback.data.accept(data);
             }
         });
         callbackOnceList.forEach(callback -> {
             if (callback.name.equals(name)) {
                 callback.data.accept(data);
-                PymcMngr.LOGGER.info("Found callback(once), removed tick{} @ {}", tickSupplier.getAsInt(), name);
+                PymcMngr.LOGGER.trace("Found callback(once), removed tick{} @ {}", tickSupplier.getAsInt(), name);
             }
         });
         callbackOnceList.removeIf(nv -> nv.name.equals(name));
@@ -93,43 +91,43 @@ public class NamedAdvancedExecutor<T> extends NamedExecutor<T> {
     }
 
     public int pushScheduled(int tick, Consumer<T> callback, String name) {
-        PymcMngr.LOGGER.info("Pushing callback(scheduled): tick{} @ {}", tickSupplier.getAsInt(), name);
+        PymcMngr.LOGGER.trace("Pushing callback(scheduled): tick{} @ {}", tickSupplier.getAsInt(), name);
         NamedExecutorIdentifier<Consumer<T>> id = new NamedExecutorIdentifier<>(callback, name);
         toAddScheduled.add(Pair.of(tick, id));
         return id.id;
     }
 
     public void removeScheduledAll() {
-        PymcMngr.LOGGER.info("Removing all callback(scheduled)");
+        PymcMngr.LOGGER.trace("Removing all callback(scheduled)");
         removeAllScheduled = true;
     }
 
     public int pushOnce(Consumer<T> callback, String name) {
-        PymcMngr.LOGGER.info("Pushing callback(once): tick{} @ {}", tickSupplier.getAsInt(), name);
+        PymcMngr.LOGGER.trace("Pushing callback(once): tick{} @ {}", tickSupplier.getAsInt(), name);
         NamedExecutorIdentifier<Consumer<T>> id = new NamedExecutorIdentifier<>(callback, name);
         toAddOnce.add(id);
         return id.id;
     }
 
     public void removeOnceAll() {
-        PymcMngr.LOGGER.info("Removing all callback(once)");
+        PymcMngr.LOGGER.trace("Removing all callback(once)");
         removeAllOnce = true;
     }
 
     public int pushContinuous(Consumer<T> callback, String name) {
-        PymcMngr.LOGGER.info("Pushing callback(continuous): tick{} @ {}", tickSupplier.getAsInt(), name);
+        PymcMngr.LOGGER.trace("Pushing callback(continuous): tick{} @ {}", tickSupplier.getAsInt(), name);
         NamedExecutorIdentifier<Consumer<T>> id = new NamedExecutorIdentifier<>(callback, name);
         toAddContinuous.add(id);
         return id.id;
     }
 
     public void removeContinuousAll() {
-        PymcMngr.LOGGER.info("Removing all callback(continuous)");
+        PymcMngr.LOGGER.trace("Removing all callback(continuous)");
         removeAllContinuous = true;
     }
 
     public void ezRemove(int id) {
-        PymcMngr.LOGGER.info("Removing callback id: {}", id);
+        PymcMngr.LOGGER.trace("Removing callback id: {}", id);
         toRemove.add(id);
     }
 
