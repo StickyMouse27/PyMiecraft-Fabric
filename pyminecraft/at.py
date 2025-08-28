@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Self, Literal, TypeAlias
+from typing import Callable, Self, Literal, TypeAlias, override
 from functools import wraps
 from abc import ABC
 from enum import Enum
@@ -19,6 +19,17 @@ from .javaobj import (
 )
 from .type_dict import TypeDict
 from .connection import get_gateway
+
+__all__ = (
+    "At",
+    "AtTick",
+    "AtEntity",
+    "AtEntityInteract",
+    "AtEntityTick",
+    "Running",
+    "After",
+    "MaxTimes",
+)
 
 
 class DecoratorBase[T: JavaObjectProxy](ABC):
@@ -84,7 +95,7 @@ class DecoratorBase[T: JavaObjectProxy](ABC):
 
         可以被子类重写以实现特定逻辑。
 
-        返回True则执行函数，返回False则执行函数。
+        返回True则执行函数，返回False则不执行函数。
         """
         return True
 
@@ -96,6 +107,7 @@ class At[T: JavaObjectProxy](DecoratorBase[T]):
     data: TypeDict
     executor: NamedAdvancedExecutor
     arg_type: type[T]
+    running_flag: Running
 
     def __init__(
         self,
@@ -116,8 +128,8 @@ class At[T: JavaObjectProxy](DecoratorBase[T]):
         for flag in flags:
             self &= flag
 
-        if RunningFlag not in self.data:
-            self.data[RunningFlag] = RunningFlag.ONCE
+        if Running not in self.data:
+            _ = self & Running.once()
 
         if dict not in self.data:
             self.data[dict] = {}
@@ -134,9 +146,12 @@ class At[T: JavaObjectProxy](DecoratorBase[T]):
             other (AtFlag): 要添加的标志
 
         Returns:
-            AbstractAt: 返回自身以支持链式调用
+            AbstractAt: 返回自身
         """
         self.data[type(other)] = other
+
+        if isinstance(other, Running):
+            self.running_flag = other
 
         return self
 
@@ -173,11 +188,13 @@ class At[T: JavaObjectProxy](DecoratorBase[T]):
         for flag_type in self.data:
             if issubclass(flag_type, AtFlag):
                 self.data[flag_type].on_define(self)
+        self.running_flag.on_define_running(self)
 
     def _modify_after_run(self) -> None:
         for flag_type in self.data:
             if issubclass(flag_type, AtFlag):
                 self.data[flag_type].on_after_run(self)
+        self.running_flag.on_after_run_running(self)
 
     def _modify_before_run(self, obj: T) -> bool:
         run = True
@@ -212,7 +229,7 @@ class AtEntity[T: Entity](At[T]):
         self,
         at: str,
         entity: str | T,
-        *flags: RunningFlag,
+        *flags: AtFlag,
         match: Matches | Callable[[T, str], bool] = "name",
         arg_type: type[T] = Entity,
     ) -> None:
@@ -221,7 +238,11 @@ class AtEntity[T: Entity](At[T]):
         self._entity = entity
         self.match = match
 
+    @override
     def _modify_before_run(self, obj: T) -> bool:
+        if not super()._modify_before_run(obj):
+            return False
+
         if isinstance(self._entity, Entity):
             return self._entity.uuid == obj.uuid
 
@@ -246,7 +267,7 @@ class AtEntityInteract(AtEntity[Entity]):
     def __init__(
         self,
         entity: str | Entity,
-        *flags: RunningFlag,
+        *flags: AtFlag,
         match: AtEntity.Matches | Callable[[Entity, str], bool] = "name",
     ) -> None:
         super().__init__("interact", entity, *flags, match=match)
@@ -262,13 +283,21 @@ class AtEntityTick(AtEntity[Entity]):
     def __init__(
         self,
         entity: str | Entity,
-        *flags: RunningFlag,
+        *flags: AtFlag,
         match: AtEntity.Matches | Callable[[Entity, str], bool] = "name",
     ) -> None:
         super().__init__("tick", entity, *flags, match=match)
 
 
-class AtFlag[T: At]:
+class RunningStatus(Enum):
+    """运行状态"""
+
+    ALWAYS = "always"
+    ONCE = "once"
+    NEVER = "never"
+
+
+class AtFlag[T: At](ABC):
     """
     标志基类，为装饰器提供各种标志选项的基础类。
     """
@@ -319,45 +348,65 @@ class AtFlag[T: At]:
         Args:
             decorator: 关联的装饰器实例
         """
-        decorator.data[RunningFlag] = RunningFlag.NEVER
+        decorator.data[Running].running = RunningStatus.NEVER
 
 
-class RunningFlag[T: At](AtFlag[T], Enum):
-    """
-    运行标志枚举，控制装饰器的执行行为。
+class Running[T: At](AtFlag[T]):
+    """运行标志，控制装饰器的执行行为。"""
 
-    Attributes:
-        ALWAYS: 持续执行
-        ONCE: 只执行一次
-        NEVER: 从不执行
-    """
+    running: RunningStatus
+    _id: int | None
 
-    ALWAYS = "always"
-    ONCE = "once"
-    NEVER = "never"
+    @staticmethod
+    def once() -> Running[T]:
+        """带有 ONCE 运行状态的 RunningFlag"""
+        return Running(RunningStatus.ONCE)
 
-    __id: int | None
+    @staticmethod
+    def always() -> Running[T]:
+        """带有 ALWAYS 运行状态的 RunningFlag"""
+        return Running(RunningStatus.ALWAYS)
 
-    def on_define(self, decorator: T) -> None:
-        if self == RunningFlag.ALWAYS:
+    @staticmethod
+    def never() -> Running[T]:
+        """带有 NEVER 运行状态的 RunningFlag"""
+        return Running(RunningStatus.NEVER)
+
+    def __init__(self, running: RunningStatus = RunningStatus.ONCE) -> None:
+        self.running = running
+        self._id = None
+
+    def on_define_running(self, decorator: T) -> None:
+        """在定义时的运行"""
+        if self.running == RunningStatus.ALWAYS:
             LOGGER.info("push_continuous %s", decorator.wrapped.__name__)
-            __id = decorator.executor.push_continuous(
+            self._id = decorator.executor.push_continuous(
                 decorator.get_middleman(), decorator.at
             )
-        elif self == RunningFlag.ONCE:
+        elif self.running == RunningStatus.ONCE:
             LOGGER.info("push_once %s", decorator.wrapped.__name__)
-            __id = decorator.executor.push_once(decorator.get_middleman(), decorator.at)
-        elif self == RunningFlag.NEVER:
+            self._id = decorator.executor.push_once(
+                decorator.get_middleman(), decorator.at
+            )
+        elif self.running == RunningStatus.NEVER:
             pass
         else:
-            raise ValueError(f"Should never reached! Invalid running flag: {self}")
+            raise ValueError(
+                f"Should never reached! Invalid running flag: {self.running}"
+            )
 
+    @override
     def on_cancel(self, decorator: T) -> None:
-        if self.__id is not None:
-            decorator.executor.remove(self.__id)
+        if self._id is not None:
+            decorator.executor.remove(self._id)
+        else:
+            LOGGER.warning("Cannot cancel the task!")
+
+    def on_after_run_running(self, decorator: T) -> None:
+        """在运行后的运行"""
 
 
-class After[T: At](AtFlag[T]):
+class After[T: At](Running[T]):
     """
     After标志，控制装饰器的执行时间。
 
@@ -367,35 +416,42 @@ class After[T: At](AtFlag[T]):
 
     after: int
 
-    def __init__(self, after: int) -> None:
+    def __init__(
+        self, after: int, running_status: RunningStatus = RunningStatus.ONCE
+    ) -> None:
         """
         初始化After标志。
 
         Args:
             after (int): 延迟执行的tick数
         """
+        super().__init__(running_status)
         self.after = after
 
-    def on_define(self, decorator: T) -> None:
-        if self == RunningFlag.ALWAYS:
+    @override
+    def on_define_running(self, decorator: T) -> None:
+        if self.running == RunningStatus.ALWAYS:
             LOGGER.info(
                 "push_scheduled(Ready to repeat) %s", decorator.wrapped.__name__
             )
             decorator.executor.push_scheduled(
                 self.after, decorator.get_middleman(), decorator.at
             )
-        elif self == RunningFlag.ONCE:
+        elif self.running == RunningStatus.ONCE:
             LOGGER.info("push_scheduled(Just once) %s", decorator.wrapped.__name__)
             decorator.executor.push_scheduled(
                 self.after, decorator.get_middleman(), decorator.at
             )
-        elif self == RunningFlag.NEVER:
+        elif self.running == RunningStatus.NEVER:
             pass
         else:
-            raise ValueError(f"Should never reached! Invalid runing flag: {self}")
+            raise ValueError(
+                f"Should never reached! Invalid runing flag: {self.running}"
+            )
 
-    def on_after_run(self, decorator: T) -> None:
-        if decorator.data[RunningFlag] == RunningFlag.ALWAYS:
+    @override
+    def on_after_run_running(self, decorator: T) -> None:
+        if self.running == RunningStatus.ALWAYS:
             decorator.executor.push_scheduled(
                 self.after, decorator.get_middleman(), decorator.at
             )
@@ -431,10 +487,10 @@ class MaxTimes[T: At](AtFlag[T]):
         """
         if self.times_left > 0:
             self.times_left -= 1
-            if self.times_left == 0:
-                return False
-        return True
+            return True
+        return False
 
+    @override
     def on_before_run(self, _decorator: T, _obj: JavaObjectProxy) -> bool:
         return self.step()
 

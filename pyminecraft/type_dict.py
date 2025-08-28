@@ -10,6 +10,8 @@ from typing import (
 )
 from collections.abc import MutableMapping
 
+__all__ = ("TypeDict",)
+
 
 class TypeDict(MutableMapping[type[Any], Any]):
     """
