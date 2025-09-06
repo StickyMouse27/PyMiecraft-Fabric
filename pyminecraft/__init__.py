@@ -6,8 +6,8 @@ Link: https://github.com/PyMinecraft/PyMinecraft-Fabric
 
 from .at import *
 from .javaobj import *
-from .utils import LOGGER
-from .type_dict import TypeDict
+from .utils import *
+from .type_dict import AtDict
 
 # 还有些问题…
 # from .connection import disconnect

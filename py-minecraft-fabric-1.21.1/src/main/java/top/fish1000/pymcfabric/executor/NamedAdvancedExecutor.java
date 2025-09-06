@@ -1,5 +1,6 @@
 package top.fish1000.pymcfabric.executor;
 
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.function.Consumer;
 import java.util.function.IntSupplier;
@@ -17,6 +18,11 @@ public class NamedAdvancedExecutor<T> extends NamedExecutor<T> {
     protected Boolean removeAllContinuous = false;
     protected Boolean removeAllOnce = false;
     protected Boolean removeAllScheduled = false;
+
+    protected int tick = 0;
+    protected Long tickTimeSum = 0L;
+    protected HashMap<String, Long> tickTimes = new HashMap<>();
+    protected Boolean printDebug = false;
 
     public NamedAdvancedExecutor(IntSupplier tickSupplier) {
         super(tickSupplier);
@@ -77,9 +83,38 @@ public class NamedAdvancedExecutor<T> extends NamedExecutor<T> {
         callbackOnceList.removeIf(nv -> nv.name.equals(name));
     }
 
+    public void timedTick(T data, String name) {
+        if (tick != tickSupplier.getAsInt()) {
+            if (printDebug) {
+                PymcMngr.LOGGER.info("Pymc tick time: {}ms @ tick{}", tickTimeSum / 1e6d, tick);
+                tickTimes.forEach((n, t) -> PymcMngr.LOGGER.info("| {}ms @ {}", t / 1e6d, n));
+                PymcMngr.LOGGER.info("+---------------------------------------------------------------->");
+                printDebug = false;
+            }
+            if (tickTimeSum > 40e6) {
+                PymcMngr.LOGGER.warn("Tick time too long(shouldn't longer than 40ms): {}ms @ tick{}",
+                        tickTimeSum / 1e6d, tick);
+            }
+            tick = tickSupplier.getAsInt();
+            tickTimeSum = 0L;
+            tickTimes.clear();
+        }
+        long startTime = System.nanoTime();
+        tick(data, name);
+        long tickTime = System.nanoTime() - startTime;
+        if (tickTime > 1e4) {
+            tickTimes.put(name, tickTime);
+        }
+        tickTimeSum += tickTime;
+    }
+
+    public void printDebug() {
+        printDebug = true;
+    }
+
     public void tryTick(T data, String name) {
         try {
-            tick(data, name);
+            timedTick(data, name);
         } catch (Exception e) {
             callbackContinuousList.clear();
             callbackOnceList.clear();

@@ -66,7 +66,7 @@ public class PymcMngr {
     }
 
     public static Entity loadEntity(String id, World world, @Nullable NbtCompound nbt,
-            float x, float y, float z, float yaw, float pitch) {
+            double x, double y, double z, float yaw, float pitch) {
         if (nbt == null)
             nbt = new NbtCompound();
 
@@ -75,5 +75,10 @@ public class PymcMngr {
             entity.refreshPositionAndAngles(x, y, z, yaw, pitch);
             return entity;
         });
+    }
+
+    public static Entity loadEntity(String id, World world, @Nullable NbtCompound nbt,
+            Vec3d pos) {
+        return loadEntity(id, world, nbt, pos.x, pos.y, pos.z, 0, 0);
     }
 }

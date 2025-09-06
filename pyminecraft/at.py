@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Self, Literal, TypeAlias, override
+from typing import Any, Callable, Self, override
 from functools import wraps
 from abc import ABC
 from enum import Enum
@@ -17,7 +17,7 @@ from .javaobj import (
     PymcMngr,
     CallbackFunction,
 )
-from .type_dict import TypeDict
+from .type_dict import AtDict
 from .connection import get_gateway
 
 __all__ = (
@@ -29,6 +29,7 @@ __all__ = (
     "Running",
     "After",
     "MaxTimes",
+    "Data",
 )
 
 
@@ -68,7 +69,7 @@ class DecoratorBase[T: JavaObjectProxy](ABC):
         """
 
         @wraps(self.func)
-        def wrapper(obj: T, data: TypeDict) -> None:
+        def wrapper(obj: T, data: AtDict) -> None:
             if self._modify_before_run(obj):
                 self.func(obj, data)
                 self._modify_after_run(obj)
@@ -104,7 +105,7 @@ class At[T: JavaObjectProxy](DecoratorBase[T]):
     """At装饰器，用于在特定位置执行函数。"""
 
     at: str
-    data: TypeDict
+    data: AtDict
     executor: NamedAdvancedExecutor
     arg_type: type[T]
     running: Running
@@ -122,7 +123,7 @@ class At[T: JavaObjectProxy](DecoratorBase[T]):
             at (str): 触发装饰器执行的位置
             *flags (AtFlag): 应用于装饰器的标志
         """
-        self.data = TypeDict()
+        self.data = AtDict()
 
         self.at = at
         for flag in flags:
@@ -130,9 +131,6 @@ class At[T: JavaObjectProxy](DecoratorBase[T]):
 
         if Running not in self.data:
             _ = self & Running.once()
-
-        if dict not in self.data:
-            self.data[dict] = {}
 
         self.data[type(self)] = self
         self.executor = PymcMngr.from_gateway(get_gateway()).executor
@@ -271,12 +269,12 @@ class RunningStatus(Enum):
     NEVER = "never"
 
 
-class AtFlag[T: At](ABC):
+class AtFlag(ABC):
     """
     标志基类，为装饰器提供各种标志选项的基础类。
     """
 
-    def __rand__(self, value: Callable[[], T]) -> T:
+    def __rand__[T: At](self, value: Callable[[], T]) -> T:
         """
         支持反向的 & 操作符。
 
@@ -286,7 +284,7 @@ class AtFlag[T: At](ABC):
 
         return value() & self
 
-    def on_define(self, _decorator: T) -> None:
+    def on_define(self, _decorator: At) -> None:
         """
         在装饰器定义时执行的操作。
 
@@ -294,7 +292,7 @@ class AtFlag[T: At](ABC):
             decorator: 关联的装饰器实例
         """
 
-    def on_before_run(self, _decorator: T, _obj: JavaObjectProxy) -> bool:
+    def on_before_run(self, _decorator: At, _obj: JavaObjectProxy) -> bool:
         """
         在函数运行前执行的操作。
 
@@ -307,7 +305,7 @@ class AtFlag[T: At](ABC):
         """
         return True
 
-    def on_after_run(self, _decorator: T) -> None:
+    def on_after_run(self, _decorator: At) -> None:
         """
         在函数运行后执行的操作。
 
@@ -315,7 +313,7 @@ class AtFlag[T: At](ABC):
             decorator: 关联的装饰器实例
         """
 
-    def on_cancel(self, decorator: T) -> None:
+    def on_cancel(self, decorator: At) -> None:
         """
         在装饰器取消执行时执行。
 
@@ -325,24 +323,24 @@ class AtFlag[T: At](ABC):
         decorator.data[Running].status = RunningStatus.NEVER
 
 
-class Running[T: At](AtFlag[T]):
+class Running(AtFlag):
     """运行标志，控制装饰器的执行行为。"""
 
     status: RunningStatus
     _id: int | None
 
     @staticmethod
-    def once() -> Running[T]:
+    def once() -> Running:
         """带有 ONCE 运行状态的 RunningFlag"""
         return Running(RunningStatus.ONCE)
 
     @staticmethod
-    def always() -> Running[T]:
+    def always() -> Running:
         """带有 ALWAYS 运行状态的 RunningFlag"""
         return Running(RunningStatus.ALWAYS)
 
     @staticmethod
-    def never() -> Running[T]:
+    def never() -> Running:
         """带有 NEVER 运行状态的 RunningFlag"""
         return Running(RunningStatus.NEVER)
 
@@ -350,7 +348,7 @@ class Running[T: At](AtFlag[T]):
         self.status = status
         self._id = None
 
-    def on_define_running(self, decorator: T) -> None:
+    def on_define_running(self, decorator: At) -> None:
         """在定义时的运行"""
         if self.status == RunningStatus.ALWAYS:
             LOGGER.info("push_continuous %s", decorator.wrapped.__name__)
@@ -370,17 +368,17 @@ class Running[T: At](AtFlag[T]):
             )
 
     @override
-    def on_cancel(self, decorator: T) -> None:
+    def on_cancel(self, decorator: At) -> None:
         if self._id is not None:
             decorator.executor.remove(self._id)
         else:
             LOGGER.warning("Cannot cancel the task!")
 
-    def on_after_run_running(self, decorator: T) -> None:
+    def on_after_run_running(self, decorator: At) -> None:
         """在运行后的运行"""
 
 
-class After[T: At](Running[T]):
+class After(Running):
     """
     After标志，控制装饰器的执行时间。
 
@@ -403,7 +401,7 @@ class After[T: At](Running[T]):
         self.after = after
 
     @override
-    def on_define_running(self, decorator: T) -> None:
+    def on_define_running(self, decorator: At) -> None:
         if self.status == RunningStatus.ALWAYS:
             LOGGER.info(
                 "push_scheduled(Ready to repeat) %s", decorator.wrapped.__name__
@@ -424,14 +422,14 @@ class After[T: At](Running[T]):
             )
 
     @override
-    def on_after_run_running(self, decorator: T) -> None:
+    def on_after_run_running(self, decorator: At) -> None:
         if self.status == RunningStatus.ALWAYS:
             decorator.executor.push_scheduled(
                 self.after, decorator.get_middleman(), decorator.at
             )
 
 
-class MaxTimes[T: At](AtFlag[T]):
+class MaxTimes(AtFlag):
     """
     最大执行次数标志，限制装饰器的执行次数。
 
@@ -465,7 +463,7 @@ class MaxTimes[T: At](AtFlag[T]):
         return False
 
     @override
-    def on_before_run(self, _decorator: T, _obj: JavaObjectProxy) -> bool:
+    def on_before_run(self, _decorator: At, _obj: JavaObjectProxy) -> bool:
         return self.step()
 
     @property
@@ -482,3 +480,15 @@ class MaxTimes[T: At](AtFlag[T]):
     def the_first(self) -> bool:
         """是否正在执行第一次"""
         return self.times_left == self.times_all
+
+
+class Data(AtFlag):
+    """直接向 data 添加数据"""
+
+    data: dict[str, Any]
+
+    def __init__(self, **data: Any):
+        self.data = data
+
+    def on_define(self, decorator: At) -> None:
+        decorator.data[dict].update(self.data)

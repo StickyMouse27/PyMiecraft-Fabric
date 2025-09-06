@@ -7,10 +7,12 @@ from typing import (
     Any,
     Optional,
     Iterator,
+    override,
+    overload,
 )
 from collections.abc import MutableMapping
 
-__all__ = ("TypeDict",)
+__all__ = ("AtDict",)
 
 
 class TypeDict(MutableMapping[type[Any], Any]):
@@ -169,6 +171,35 @@ class TypeDict(MutableMapping[type[Any], Any]):
             对象的字符串表示
         """
         return f"{self.__class__.__name__}({dict(self._data)})"
+
+
+class AtDict(TypeDict):
+    """加强 Type Dict ，将 typedict[string] 映射到 typedict[dict][string]"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self[dict] = {}
+
+    @overload
+    def __setitem__(self, key: str, value: Any) -> None: ...
+    @overload
+    def __setitem__[T](self, key: type[T], value: T) -> None: ...
+    @override
+    def __setitem__[T](self, key: type[T] | str, value: Any) -> None:
+        if isinstance(key, str):
+            self[dict][key] = value
+        else:
+            super().__setitem__(key, value)
+
+    @overload
+    def __getitem__(self, key: str) -> Any: ...
+    @overload
+    def __getitem__[T](self, key: type[T]) -> T: ...
+    @override
+    def __getitem__[T](self, key: type[T] | str) -> Any:
+        if isinstance(key, str):
+            return self[dict][key]
+        return super().__getitem__(key)
 
 
 # 使用示例

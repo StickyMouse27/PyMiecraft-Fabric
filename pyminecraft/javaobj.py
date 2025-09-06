@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from py4j.java_gateway import JavaObject, JavaGateway, get_field
 from py4j.java_collections import JavaList
 
-from .type_dict import TypeDict
+from .type_dict import AtDict
 
 __all__ = ("Server", "NamedAdvancedExecutor", "Entity")
 
@@ -24,12 +24,7 @@ class JavaObjectProxy:
     _gateway: JavaGateway
 
     def __init__(self, java_object: JavaObject, java_gateway: JavaGateway):
-        """
-        初始化Java对象代理
-
-        Args:
-            java_object (JavaObject): 要包装的Java对象
-        """
+        """初始化Java对象代理"""
         self._obj = java_object
         self._gateway = java_gateway
 
@@ -68,14 +63,11 @@ class JavaObjectProxy:
     def proxy[T](self, obj: Any, cls: type[T] | None) -> T | JavaObjectProxy: ...
     def proxy[T](self, obj: Any, cls: type[T] | None = None) -> T | JavaObjectProxy:
         """
-        获取代理对象
+        代理对象
 
         Args:
             obj: Java对象
             cls: 代理对象类型
-
-        Returns:
-            代理对象
         """
         if cls is None:
             return JavaObjectProxy(obj, self._gateway)
@@ -96,7 +88,6 @@ class JavaObjectProxy:
     def call[T](self, path: str, args: Iterable[Any], ret: type[T]) -> T: ...
     @overload
     def call(self, path: str, args: Iterable[Any], ret: None) -> None: ...
-
     @overload
     def call(self, path: str, args: Iterable[Any] = ()) -> JavaObjectProxy: ...
 
@@ -112,12 +103,11 @@ class JavaObjectProxy:
         Args:
             path: 方法路径
             cls: 返回值类型
-            *args: 方法参数
+            args: 方法参数
 
         Returns:
             返回值
         """
-
         func: Callable = getattr(self._obj, path)
         if not callable(func):
             raise TypeError(f"{path} is not a function")
@@ -152,7 +142,7 @@ class JavaObjectProxy:
         Args:
             path: 方法路径
             cls: 返回值类型
-            *args: 方法参数
+            args: 方法参数
 
         Returns:
             列表返回值
@@ -234,9 +224,7 @@ class JavaObjectProxy:
 
 
 class JavaListProxy[T](JavaObjectProxy, Sequence[T]):
-    """
-    Java列表包装类
-    """
+    """Java列表包装类"""
 
     _list: JavaList
     _item_handler_type: type[T]
@@ -265,15 +253,7 @@ class JavaListProxy[T](JavaObjectProxy, Sequence[T]):
     def __getitem__(self, index: slice) -> Sequence[T]: ...
 
     def __getitem__(self, index: int | slice) -> T | Sequence[T]:
-        """
-        获取指定索引处的元素
-
-        Args:
-            index (int): 元素索引
-
-        Returns:
-            T: 指定索引处的元素
-        """
+        """获取指定索引处的元素"""
         if isinstance(index, slice):
             # 处理切片
             sliced_list = self._list[index]
@@ -285,12 +265,7 @@ class JavaListProxy[T](JavaObjectProxy, Sequence[T]):
         )
 
     def __len__(self) -> int:
-        """
-        返回列表长度
-
-        Returns:
-            int: 列表元素数量
-        """
+        """返回列表长度"""
         return len(self._list)
 
 
@@ -352,7 +327,7 @@ class JavaClassFactory(JavaObjectProxy):
 
 
 V = TypeVar("V", bound=JavaObjectProxy)
-CallbackFunction: TypeAlias = Callable[[V, TypeDict], None]
+CallbackFunction: TypeAlias = Callable[[V, AtDict], None]
 V3dTup: TypeAlias = tuple[float, float, float]
 V3iTup: TypeAlias = tuple[int, int, int]
 RotTup: TypeAlias = tuple[float, float]
@@ -369,22 +344,12 @@ class PymcMngr(JavaObjectProxy):
 
     @property
     def mod_id(self) -> str:
-        """
-        获取模组ID
-
-        Returns:
-            str: 模组ID字符串
-        """
+        """获取模组ID"""
         return self.get("MOD_ID", str)
 
     @property
     def logger(self) -> JavaLogger:
-        """
-        获取Java端日志记录器实例
-
-        Returns:
-            JavaLogger: Java日志记录器包装对象
-        """
+        """获取Java端日志记录器实例"""
         return self.get("LOGGER", JavaLogger)
 
     @property
@@ -400,38 +365,17 @@ class PymcMngr(JavaObjectProxy):
         return self.get("executor", NamedAdvancedExecutor)
 
     def get_command_source(self, name: str = "PYMC") -> JavaObjectProxy:
-        """
-        获取命令源对象
-
-        Args:
-            name (str): 命令源名称
-
-        Returns:
-            命令源对象
-        """
+        """获取命令源对象"""
 
         return self.call("getCommandSource", (name,))
 
     def send_command(self, command: str, name: str) -> None:
-        """
-        发送命令
-
-        Args:
-            command (str): 命令
-        """
+        """发送命令"""
 
         self.call("sendCommand", (command, name), None)
 
     def get_entities(self, selector: str) -> JavaListProxy[Entity]:
-        """
-        获取实体对象
-
-        Args:
-            selector (str): 选择器
-
-        Returns:
-            实体对象
-        """
+        """获取实体对象"""
 
         return self.call_list("getEntities", (selector,), Entity)
 
@@ -441,18 +385,18 @@ class PymcMngr(JavaObjectProxy):
         world: World,
         *,
         nbt: NbtCompound | None = None,
-        where: PosRotTup | V3dTup | None = None,
+        where: PosRotTup | V3dLike | None = None,
     ) -> Entity:
-        """加载实体对象
-
-        Args:
-            id (str): 实体id
-
-        Returns:
-            实体对象
-        """
+        """加载实体对象"""
         if where is None:
             where = world.spawn_pos.to_v3d().xyz
+
+        if isinstance(where, V3d):
+            return self.call(
+                "loadEntity",
+                (name, world, nbt, where),
+                Entity,
+            )
 
         if len(where) <= 3:
             where = where + (0, 0)
@@ -469,46 +413,22 @@ class PymcMngr(JavaObjectProxy):
 
 
 class JavaLogger(JavaObjectProxy):
-    """
-    Java日志记录器包装类
-
-    提供对Java端Logger对象的Python接口访问，支持不同级别的日志记录
-    """
+    """Java日志记录器包装类"""
 
     def debug(self, message: str) -> None:
-        """
-        记录调试级别日志
-
-        Args:
-            message (str): 日志消息
-        """
+        """记录调试级别日志"""
         self.call("debug", (message,), None)
 
     def info(self, message: str) -> None:
-        """
-        记录信息级别日志
-
-        Args:
-            message (str): 日志消息
-        """
+        """记录信息级别日志"""
         self.call("info", (message,), None)
 
     def warn(self, message: str) -> None:
-        """
-        记录警告级别日志
-
-        Args:
-            message (str): 日志消息
-        """
+        """记录警告级别日志"""
         self.call("warn", (message,), None)
 
     def error(self, message: str) -> None:
-        """
-        记录错误级别日志
-
-        Args:
-            message (str): 日志消息
-        """
+        """记录错误级别日志"""
         self.call("error", (message,), None)
 
 
@@ -576,11 +496,30 @@ class V3d(JavaObjectProxy):
         """x, y, z"""
         return self.x, self.y, self.z
 
+    @staticmethod
+    def to_arg(v3d: V3dLike) -> tuple[V3d] | V3dTup:
+        """将v3d转为参数类型"""
+        if isinstance(v3d, tuple):
+            return v3d
+        return (v3d,)
+
     def __iter__(self):
         """允许将 V3d 解包为 (x, y, z)"""
         yield self.x
         yield self.y
         yield self.z
+
+    def __add__(self, other: V3dLike) -> V3d:
+        """两个 V3d 相加"""
+        return self.call("add", V3d.to_arg(other), V3d)
+
+    def __sub__(self, other: V3dLike) -> V3d:
+        """两个 V3d 相减"""
+        return self.call("subtract", V3d.to_arg(other), V3d)
+
+    def __mul__(self, other: float) -> V3d:
+        """两个 V3d 相乘"""
+        return self.call("multiply", (other,), V3d)
 
     @classmethod
     def create(cls, source: JavaObjectProxy, vec: V3dTup) -> V3d:
@@ -594,6 +533,10 @@ class BlockPos(V3i):
     """net.minecraft.util.math.BlockPos"""
 
 
+V3dLike: TypeAlias = V3dTup | V3d
+V3iLike: TypeAlias = V3iTup | V3i
+
+
 class Middleman[T: JavaObjectProxy]:
     """
     中间人类，用于在Java和Python之间传递回调函数。
@@ -605,14 +548,14 @@ class Middleman[T: JavaObjectProxy]:
         self,
         func: CallbackFunction[T],
         handler: Callable[[JavaObject], T],
-        data: TypeDict,
+        data: AtDict,
     ) -> None:
         """
         初始化Middleman实例。
 
         Args:
             func (CallbackFunction): 要被调用的Python回调函数
-            info (TypeDict): 传递给回调函数的额外信息字典
+            data (TypeDict): 传递给回调函数的额外信息字典
         """
         self.func: CallbackFunction[T] = func
         self.data = data
@@ -656,15 +599,6 @@ class NamedAdvancedExecutor(JavaObjectProxy):
         """
         return self.call("pushScheduled", (tick, callback, name), int)
 
-    def remove_scheduled(self, identity: int) -> None:
-        """
-        删除一个计划任务
-
-        Args:
-            identity (int): 任务ID
-        """
-        self.call("removeScheduled", (identity,), int)
-
     def push_continuous(self, callback: Middleman, name: str) -> int:
         """
         添加一个连续任务，每个tick都会执行
@@ -674,15 +608,6 @@ class NamedAdvancedExecutor(JavaObjectProxy):
             name (str): 任务名称
         """
         return self.call("pushContinuous", (callback, name), int)
-
-    def remove_continuous(self, identity: int) -> None:
-        """
-        删除一个连续任务
-
-        Args:
-            identity (int): 任务ID
-        """
-        self.call("removeContinuous", (identity,), int)
 
     def push_once(self, callback: Middleman, name: str) -> int:
         """
@@ -694,29 +619,17 @@ class NamedAdvancedExecutor(JavaObjectProxy):
         """
         return self.call("pushOnce", (callback, name), int)
 
-    def remove_once(self, identity: int) -> None:
-        """
-        移除一个一次性任务
-
-        Args:
-            identity (int): 任务id
-        """
-        self.call("removeOnce", (identity,), int)
-
     def remove(self, identity: int) -> None:
-        """
-        移除一个任务
-
-        Args:
-            identity (int): 任务id
-        """
+        """移除一个任务"""
         self.call("ezRemove", (identity,), int)
 
     def remove_all(self) -> None:
-        """
-        移除所有任务
-        """
+        """移除所有任务"""
         self.call("ezRemoveAll", (), None)
+
+    def print_debug(self) -> None:
+        """打印调试信息"""
+        self.call("printDebug", (), None)
 
 
 class NbtValue(JavaObjectProxy):
@@ -746,19 +659,12 @@ class NbtCompound(NbtValue):
     @staticmethod
     def create(source: JavaObjectProxy, **kwargs: NbtType) -> NbtCompound:
         """生成一个NbtCompound"""
-        nbt = source.class_factory.new("net.minecraft.nbt.NbtCompound", (), NbtCompound)
-        for key, value in kwargs.items():
-            nbt.put(key, value)
-        return nbt
+        return source.class_factory.call_static(
+            "net.minecraft.nbt.StringNbtReader.parse", (str(kwargs),), NbtCompound
+        )
 
     def put(self, key: str, value: NbtType) -> Self:
-        """
-        向 compound 中添加一个元素
-
-        Args:
-            key (str): 元素的 key
-            value (Any): 元素的 value
-        """
+        """向 compound 中添加一个元素"""
         if isinstance(value, list):
             self.call("put", (key, NbtList.create(self, *value)), None)
         elif isinstance(value, dict):
@@ -779,21 +685,21 @@ class NbtList[T: NbtType](NbtValue):
             nbt.add(value)
         return nbt
 
-    def add(self, value: T) -> Self:
+    def add(self, value: T, ind: int | None = None) -> Self:
         """向列表中添加一个元素"""
+        args: list[Any] = [] if ind is None else [ind]
         if isinstance(value, list):
-            self.call(
-                "add", (self.call("size", (), int), NbtList.create(self, *value)), None
-            )
+            args.append(NbtList.create(self, *value))
         elif isinstance(value, dict):
-            self.call(
-                "add",
-                (self.call("size", (), int), NbtCompound.create(self, **value)),
-                None,
-            )
+            args.append(NbtCompound.create(self, **value))
         else:
-            self.call("add", (self.call("size", (), int), self.of(self, value)), None)
+            args.append(self.of(self, value))
+        if not self.call("add", args, bool):
+            raise ValueError(f"Cannot add value {value} to nbt")
         return self
+
+    def __len__(self) -> int:
+        return self.call("size", (), int)
 
 
 NbtType: TypeAlias = (
@@ -819,13 +725,6 @@ class Entity(JavaObjectProxy):
         """获取实体UUID"""
         return self.call("getUuidAsString", (), str)
 
-    def move(self, movement: V3dTup) -> None:
-        """移动一个实体"""
-        x = float(movement[0] + self.x)
-        y = float(movement[1] + self.y)
-        z = float(movement[2] + self.z)
-        self.pos = x, y, z
-
     @property
     def x(self) -> float:
         """获取实体的X坐标"""
@@ -847,7 +746,7 @@ class Entity(JavaObjectProxy):
         return self.call("getPos", (), V3d)
 
     @pos.setter
-    def pos(self, pos: V3d | V3dTup) -> None:
+    def pos(self, pos: V3dLike) -> None:
         """设置实体的位置"""
         if isinstance(pos, tuple):
             self.call("setPosition", (*pos,), None)
@@ -890,7 +789,7 @@ class Entity(JavaObjectProxy):
         return self.call("getVelocity", (), V3d)
 
     @velocity.setter
-    def velocity(self, velocity: V3d | V3dTup) -> None:
+    def velocity(self, velocity: V3dLike) -> None:
         """设置实体的移动速度"""
         if isinstance(velocity, tuple):
             self.call("setVelocity", (*velocity,), None)
@@ -936,12 +835,7 @@ class Server(JavaObjectProxy):
     """
 
     def cmd(self, command: str, name: str = "PYMC"):
-        """
-        执行Minecraft命令
-
-        Args:
-            str (str): 要执行的命令字符串
-        """
+        """执行 Minecraft 命令"""
         source = self.mngr.get_command_source(name)
         self.call("getCommandManager").call(
             "executeWithPrefix", (source, command), None
@@ -977,19 +871,19 @@ class World(JavaObjectProxy):
     @property
     def overworld(self):
         """主世界"""
-        return self.call("OVERWORLD")
+        return self.get("OVERWORLD")
 
     @property
     def nether(self):
         """下界"""
-        return self.call("NETHER")
+        return self.get("NETHER")
 
     @property
     def end(self):
         """末地"""
-        return self.call("END")
+        return self.get("END")
 
-    def summon(self, name: str, pos: V3dTup | None = None, **nbt: NbtType) -> Entity:
+    def summon(self, name: str, pos: V3dLike | None = None, **nbt: NbtType) -> Entity:
         """召唤实体"""
         entity = self.mngr.load_entity(
             name, self, where=pos, nbt=NbtCompound.create(self, **nbt)

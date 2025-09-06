@@ -7,7 +7,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.At;
 
 import net.minecraft.entity.Entity;
-import net.minecraft.entity.Entity.RemovalReason;
 import net.minecraft.util.ActionResult;
 import top.fish1000.pymcfabric.PymcMngr;
 
@@ -33,7 +32,6 @@ public abstract class EntityMixin {
 
     @Inject(method = "setRemoved(Lnet/minecraft/entity/Entity$RemovalReason;)V", at = @At("HEAD"))
     private void entityRemoved(CallbackInfo info) {
-        PymcMngr.LOGGER.info("11111");
         tick("removed");
     }
 }
